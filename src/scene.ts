@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { buildApproachPath, landingSurface, KICKER } from './timeline';
-import type { SceneMode } from './timeline';
+import type { SceneMode, KickerParams } from './timeline';
 
 export interface PanelScene {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   controls: OrbitControls;
   setMode(mode: SceneMode): void;
+  setKicker(kicker: KickerParams): void;
   setBedDepth(depth: number): void;
   // keep the orbit target on the skier while preserving the camera offset
   follow(target: THREE.Vector3, snap?: boolean): void;
@@ -19,25 +20,25 @@ const SNOW_EDGE = 0x3c434c;
 const TRAMP_BED = 0x1d2430;
 const TRAMP_FRAME = 0x556070;
 
-function buildSkiTerrain(): THREE.Group {
+function buildSkiTerrain(k: KickerParams): THREE.Group {
   const g = new THREE.Group();
   const width = 3.2;
   const half = width / 2;
 
   // profile of the whole hill in the yz plane
   const profile: { z: number; y: number }[] = [];
-  const path = buildApproachPath();
+  const path = buildApproachPath(k);
   for (const p of path) profile.push({ z: p.z, y: p.y });
   // vertical back of the kicker down to the deck, then the table and the landing
-  profile.push({ z: 0.001, y: -KICKER.deckDrop });
-  const endZ = KICKER.knuckleZ + KICKER.landingLength * Math.cos(KICKER.landingAngle * Math.PI / 180);
-  const steps = 40;
+  profile.push({ z: 0.001, y: -k.deckDrop });
+  const endZ = k.knuckleZ + k.landingLength * Math.cos(k.landingAngle * Math.PI / 180);
+  const steps = 60;
   for (let i = 0; i <= steps; i++) {
-    const z = KICKER.knuckleZ * (1 - i / steps) * 0 + (0.001 + (endZ - 0.001) * (i / steps));
-    profile.push({ z, y: landingSurface(z).y });
+    const z = 0.001 + (endZ - 0.001) * (i / steps);
+    profile.push({ z, y: landingSurface(z, k).y });
   }
   // runout
-  const runY = landingSurface(endZ).y;
+  const runY = landingSurface(endZ, k).y;
   profile.push({ z: endZ + 6, y: runY - 0.4 });
 
   const verts: number[] = [];
@@ -77,7 +78,7 @@ function buildSkiTerrain(): THREE.Group {
   g.add(lip);
   // knuckle marker
   const knuckle = new THREE.Mesh(new THREE.BoxGeometry(width, 0.04, 0.06), new THREE.MeshBasicMaterial({ color: 0x556070 }));
-  knuckle.position.set(0, -KICKER.deckDrop + 0.01, KICKER.knuckleZ);
+  knuckle.position.set(0, -k.deckDrop + 0.01, k.knuckleZ);
   g.add(knuckle);
 
   return g;
@@ -168,7 +169,8 @@ export function createPanelScene(canvas: HTMLCanvasElement): PanelScene {
   fill.position.set(-4, 3, 6);
   scene.add(fill);
 
-  const skiTerrain = buildSkiTerrain();
+  let kicker: KickerParams = KICKER;
+  let skiTerrain = buildSkiTerrain(kicker);
   const tramp = buildTrampoline();
   scene.add(skiTerrain);
   scene.add(tramp.group);
@@ -179,6 +181,16 @@ export function createPanelScene(canvas: HTMLCanvasElement): PanelScene {
     tramp.group.visible = mode === 'trampoline';
   };
   applyMode();
+
+  const disposeGroup = (g: THREE.Group) => {
+    g.traverse((obj) => {
+      if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
+        obj.geometry.dispose();
+        const m = obj.material;
+        if (Array.isArray(m)) m.forEach((x) => x.dispose()); else m.dispose();
+      }
+    });
+  };
 
   const _delta = new THREE.Vector3();
   const _goal = new THREE.Vector3();
@@ -191,6 +203,15 @@ export function createPanelScene(canvas: HTMLCanvasElement): PanelScene {
     setMode(m: SceneMode) {
       if (m === mode) return;
       mode = m;
+      applyMode();
+    },
+    setKicker(k: KickerParams) {
+      if (k.speed === kicker.speed && k.knuckleZ === kicker.knuckleZ && k.lipLength === kicker.lipLength) return;
+      kicker = k;
+      scene.remove(skiTerrain);
+      disposeGroup(skiTerrain);
+      skiTerrain = buildSkiTerrain(kicker);
+      scene.add(skiTerrain);
       applyMode();
     },
     setBedDepth(d: number) {

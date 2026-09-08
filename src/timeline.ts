@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEG, clamp01, smoothstep } from './curves';
+import { DEG, clamp, clamp01, smoothstep } from './curves';
 
 // the trick timeline: approach, set on the lip, flight, landing, ride out
 // skis mode moves the skier along an in run, transition, kicker, table and landing
@@ -11,7 +11,20 @@ export type SegmentName = 'approach' | 'set' | 'flight' | 'landing' | 'rideout';
 export const GRAVITY = 9.81;
 
 // jump geometry in meters and degrees, travel is +z, lip at the origin
-export const KICKER = {
+export interface KickerParams {
+  inrunAngle: number;
+  inrunLength: number;
+  transitionRadius: number;
+  lipAngle: number;
+  lipLength: number;
+  speed: number;
+  deckDrop: number;
+  knuckleZ: number;
+  landingAngle: number;
+  landingLength: number;
+}
+
+export const KICKER: KickerParams = {
   inrunAngle: 24,
   inrunLength: 2.5,
   transitionRadius: 5.0,
@@ -23,6 +36,21 @@ export const KICKER = {
   landingAngle: 34,
   landingLength: 16,
 };
+
+// a bigger trick needs a bigger jump: more speed into a longer lip, a longer table and
+// a longer landing, the way a real park scales its features
+export function kickerFor(rotationDeg: number): KickerParams {
+  const size = clamp(rotationDeg / 720, 0.5, 2.5);
+  return {
+    ...KICKER,
+    speed: 7.4 + 1.6 * size,
+    lipLength: 2.2 + 0.5 * size,
+    transitionRadius: 4.5 + 0.8 * size,
+    deckDrop: 0.6 + 0.3 * size,
+    knuckleZ: 3.8 + 1.8 * size,
+    landingLength: 14 + 7 * size,
+  };
+}
 
 export const TIMING = {
   set: 0.25,
@@ -67,6 +95,7 @@ export interface TimelineOptions {
   landingComHeight: number;
   // seconds spent setting on the lip, longer for bigger tricks
   setDuration?: number;
+  kicker?: KickerParams;
 }
 
 export interface PathPoint {
@@ -77,25 +106,25 @@ export interface PathPoint {
 }
 
 // build the 2d ground path of the ski approach as a dense polyline ending at the lip
-export function buildApproachPath(): PathPoint[] {
+export function buildApproachPath(k: KickerParams = KICKER): PathPoint[] {
   const pts: PathPoint[] = [];
-  const lipA = KICKER.lipAngle * DEG;
-  const inA = -KICKER.inrunAngle * DEG;
-  const R = KICKER.transitionRadius;
+  const lipA = k.lipAngle * DEG;
+  const inA = -k.inrunAngle * DEG;
+  const R = k.transitionRadius;
 
   // walk backward from the lip so the lip lands on the origin
-  const kickStart = { z: -KICKER.lipLength * Math.cos(lipA), y: -KICKER.lipLength * Math.sin(lipA) };
+  const kickStart = { z: -k.lipLength * Math.cos(lipA), y: -k.lipLength * Math.sin(lipA) };
   const center = { z: kickStart.z - R * Math.sin(lipA), y: kickStart.y + R * Math.cos(lipA) };
   const arcStart = { z: center.z + R * Math.sin(inA), y: center.y - R * Math.cos(inA) };
-  const inStart = { z: arcStart.z - KICKER.inrunLength * Math.cos(inA), y: arcStart.y - KICKER.inrunLength * Math.sin(inA) };
+  const inStart = { z: arcStart.z - k.inrunLength * Math.cos(inA), y: arcStart.y - k.inrunLength * Math.sin(inA) };
 
   let s = 0;
   const N1 = 12, N2 = 40, N3 = 12;
   for (let i = 0; i <= N1; i++) {
     const f = i / N1;
-    pts.push({ z: inStart.z + (arcStart.z - inStart.z) * f, y: inStart.y + (arcStart.y - inStart.y) * f, angle: inA, s: s + KICKER.inrunLength * f });
+    pts.push({ z: inStart.z + (arcStart.z - inStart.z) * f, y: inStart.y + (arcStart.y - inStart.y) * f, angle: inA, s: s + k.inrunLength * f });
   }
-  s += KICKER.inrunLength;
+  s += k.inrunLength;
   const arcLen = R * (lipA - inA);
   for (let i = 1; i <= N2; i++) {
     const f = i / N2;
@@ -105,7 +134,7 @@ export function buildApproachPath(): PathPoint[] {
   s += arcLen;
   for (let i = 1; i <= N3; i++) {
     const f = i / N3;
-    pts.push({ z: kickStart.z + (0 - kickStart.z) * f, y: kickStart.y + (0 - kickStart.y) * f, angle: lipA, s: s + KICKER.lipLength * f });
+    pts.push({ z: kickStart.z + (0 - kickStart.z) * f, y: kickStart.y + (0 - kickStart.y) * f, angle: lipA, s: s + k.lipLength * f });
   }
   return pts;
 }
@@ -125,10 +154,10 @@ function samplePath(path: PathPoint[], s: number): PathPoint {
 }
 
 // landing surface height and slope at a given z past the lip
-export function landingSurface(z: number): { y: number; angle: number } {
-  if (z < KICKER.knuckleZ) return { y: -KICKER.deckDrop, angle: 0 };
-  const a = -KICKER.landingAngle * DEG;
-  return { y: -KICKER.deckDrop + (z - KICKER.knuckleZ) * Math.tan(a), angle: a };
+export function landingSurface(z: number, k: KickerParams = KICKER): { y: number; angle: number } {
+  if (z < k.knuckleZ) return { y: -k.deckDrop, angle: 0 };
+  const a = -k.landingAngle * DEG;
+  return { y: -k.deckDrop + (z - k.knuckleZ) * Math.tan(a), angle: a };
 }
 
 export class Timeline {
@@ -141,6 +170,7 @@ export class Timeline {
   readonly takeoffVel = new THREE.Vector3();
   readonly landingPoint = new THREE.Vector3();
   readonly landingAngle: number;
+  readonly kicker: KickerParams;
   private readonly opts: TimelineOptions;
   private readonly landSpeed: number;
   private readonly trampVy: number;
@@ -148,18 +178,19 @@ export class Timeline {
   constructor(opts: TimelineOptions, flightTimeOverride?: number) {
     this.opts = opts;
     this.mode = opts.mode;
-    this.approachPath = buildApproachPath();
+    this.kicker = opts.kicker ?? KICKER;
+    this.approachPath = buildApproachPath(this.kicker);
     const pathLen = this.approachPath[this.approachPath.length - 1].s;
-    const groundTime = pathLen / KICKER.speed;
+    const groundTime = pathLen / this.kicker.speed;
     const setDur = opts.setDuration ?? TIMING.set;
     const approachDur = Math.max(0.3, groundTime - setDur);
 
     // takeoff state from the lip
-    const lipA = KICKER.lipAngle * DEG;
+    const lipA = this.kicker.lipAngle * DEG;
     const tangent = new THREE.Vector3(0, Math.sin(lipA), Math.cos(lipA));
     const normal = new THREE.Vector3(0, Math.cos(lipA), -Math.sin(lipA));
     this.takeoffCom.copy(normal).multiplyScalar(opts.takeoffComUp).addScaledVector(tangent, opts.takeoffComAlong);
-    this.takeoffVel.copy(tangent).multiplyScalar(KICKER.speed);
+    this.takeoffVel.copy(tangent).multiplyScalar(this.kicker.speed);
 
     // flight time from the ballistic arc meeting the landing slope
     let flight = this.solveLanding();
@@ -167,7 +198,7 @@ export class Timeline {
     this.flightTime = flight;
 
     const landZ = this.takeoffCom.z + this.takeoffVel.z * flight;
-    const surf = landingSurface(landZ);
+    const surf = landingSurface(landZ, this.kicker);
     this.landingAngle = surf.angle;
     this.landingPoint.set(0, surf.y, landZ);
     const vyLand = this.takeoffVel.y - GRAVITY * flight;
@@ -193,11 +224,11 @@ export class Timeline {
     const heightAbove = (t: number) => {
       const z = c.z + v.z * t;
       const y = c.y + v.y * t - 0.5 * GRAVITY * t * t;
-      const surf = landingSurface(z);
+      const surf = landingSurface(z, this.kicker);
       return (y - surf.y) * Math.cos(surf.angle) - h;
     };
     // march past the apex and the knuckle, then bisect the first crossing beyond the knuckle
-    let t0 = Math.max(2 * v.y / GRAVITY * 0.5, (KICKER.knuckleZ - c.z) / v.z);
+    let t0 = Math.max(2 * v.y / GRAVITY * 0.5, (this.kicker.knuckleZ - c.z) / v.z);
     let t1 = t0;
     for (let i = 0; i < 400; i++) {
       t1 = t0 + 0.02;
@@ -236,7 +267,7 @@ export class Timeline {
   }
 
   private sampleSkis(t: number, seg: TimelineSegment, p: number, out: TimelineSample): void {
-    const v = KICKER.speed;
+    const v = this.kicker.speed;
     if (seg.name === 'approach' || seg.name === 'set') {
       const s = t * v;
       const pp = samplePath(this.approachPath, s);
@@ -265,7 +296,7 @@ export class Timeline {
     const a = this.landingAngle;
     const dz = Math.cos(a) * this.landSpeed * since;
     const z = this.landingPoint.z + dz;
-    const surf = landingSurface(z);
+    const surf = landingSurface(z, this.kicker);
     out.onGround = true;
     out.point.set(0, surf.y, z);
     out.tangent.set(0, Math.sin(surf.angle), Math.cos(surf.angle));

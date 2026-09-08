@@ -79,6 +79,7 @@ function rebuildPanel(panel: Panel, config: PanelConfig): void {
   panel.baked = bake(configToBake(config));
   panel.figure.setSkis(config.mode === 'skis');
   panel.panelScene.setMode(config.mode);
+  panel.panelScene.setKicker(panel.baked.kicker);
   panel.overlays.rebuild(panel.baked);
   panel.ui.setSummary(panel.baked.summary);
   panel.baked.sampleAt(globalT * panel.baked.duration, panel.frame);
