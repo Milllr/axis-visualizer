@@ -67,7 +67,7 @@ export interface TimelineOptions {
   landingComHeight: number;
 }
 
-interface PathPoint {
+export interface PathPoint {
   z: number;
   y: number;
   angle: number; // tangent angle from horizontal, positive is uphill
@@ -75,7 +75,7 @@ interface PathPoint {
 }
 
 // build the 2d ground path of the ski approach as a dense polyline ending at the lip
-function buildApproachPath(): PathPoint[] {
+export function buildApproachPath(): PathPoint[] {
   const pts: PathPoint[] = [];
   const lipA = KICKER.lipAngle * DEG;
   const inA = -KICKER.inrunAngle * DEG;
