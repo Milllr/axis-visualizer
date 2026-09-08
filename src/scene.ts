@@ -199,7 +199,8 @@ export function createPanelScene(canvas: HTMLCanvasElement): PanelScene {
     follow(target: THREE.Vector3, snap = false) {
       _goal.copy(target);
       _delta.subVectors(_goal, controls.target);
-      if (!snap) _delta.multiplyScalar(0.25);
+      // ease toward the skier, but jump straight there after a big scrub
+      if (!snap && _delta.length() < 2.5) _delta.multiplyScalar(0.25);
       controls.target.add(_delta);
       camera.position.add(_delta);
     },
