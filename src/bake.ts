@@ -65,6 +65,7 @@ export interface BakeSummary {
   axisTiltDeg: number;
   peakOmegaDeg: number;
   meanOmegaDeg: number;
+  touchdownOmegaDeg: number;
   airtime: number;
   landingCorrectionDeg: number;
   precessionDeg: number;
@@ -433,6 +434,10 @@ export function bake(config: BakeConfig): Baked {
   }
   const last = frames[n - 1];
   rotationalDeg = last.rotDegSoFar;
+  let touchdownOmega = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    if (frames[i].segment === 'flight') { touchdownOmega = frames[i].omegaDeg; break; }
+  }
   const summary: BakeSummary = {
     nominalDeg: config.rotationDeg,
     rotationalDeg,
@@ -441,6 +446,7 @@ export function bake(config: BakeConfig): Baked {
     axisTiltDeg: path.tiltDeg,
     peakOmegaDeg: peak,
     meanOmegaDeg: meanN > 0 ? meanAcc / meanN : 0,
+    touchdownOmegaDeg: touchdownOmega,
     airtime: timeline.flightTime,
     landingCorrectionDeg,
     precessionDeg: path.precessionRad / DEG,

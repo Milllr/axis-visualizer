@@ -202,7 +202,7 @@ export function createPanelUI(
         `${s.modelLabel}, L tilt ${fmt(s.axisTiltDeg)}°`,
         `rotational degrees ${fmt(s.rotationalDeg)} vs ${fmt(s.nominalDeg)} nominal (${s.shortcutDeg >= 0 ? 'shortcut' : 'detour'} ${fmt(Math.abs(s.shortcutDeg))}°)`,
         split,
-        `speed weighted tilt ${fmt(s.weightedTiltDeg)}°, peak ${fmt(s.peakOmegaDeg)}°/s`,
+        `speed weighted tilt ${fmt(s.weightedTiltDeg)}°, peak ${fmt(s.peakOmegaDeg)}°/s, touchdown ${fmt(s.touchdownOmegaDeg)}°/s`,
         `air ${s.airtime.toFixed(2)}s, inertia ${s.inertiaExtended.toFixed(1)} → ${s.inertiaTucked.toFixed(1)} kg·m², landing pull ${fmt(s.landingCorrectionDeg)}°`,
       ];
       for (const l of lines) summaryEl.appendChild(el('div', {}, l));
