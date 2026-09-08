@@ -118,7 +118,7 @@ function addPanel(): void {
 
   rebuildPanel(panelRef, ui.config);
   // start the view a little behind and to the side of the skier
-  panelScene.camera.position.copy(panelRef.frame.pivotPos).add(new THREE.Vector3(6.5, 2.5, -3.5));
+  panelScene.camera.position.copy(panelRef.frame.pivotPos).add(new THREE.Vector3(4.2, 1.4, -2.2));
   panelScene.controls.target.copy(panelRef.frame.pivotPos);
   panelScene.controls.update();
   updateViewports();

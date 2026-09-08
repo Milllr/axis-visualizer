@@ -252,7 +252,8 @@ export function bake(config: BakeConfig): Baked {
   const landingCorrectionDeg = 2 * Math.acos(clamp(Math.abs(correction.w), 0, 1)) / DEG;
   const identity = new THREE.Quaternion();
 
-  const orientationAt = (i: number, F: number[], out: THREE.Quaternion): THREE.Quaternion => {
+  // trick rotation alone, before the body is aligned to the ground
+  const trickOrientationAt = (i: number, F: number[], out: THREE.Quaternion): THREE.Quaternion => {
     const t = times[i];
     timeline.sample(t, tsample);
     const seg = tsample.segment;
@@ -267,6 +268,15 @@ export function bake(config: BakeConfig): Baked {
         out.premultiply(_q2);
       }
     }
+    return out;
+  };
+
+  const orientationAt = (i: number, F: number[], out: THREE.Quaternion): THREE.Quaternion => {
+    const t = times[i];
+    trickOrientationAt(i, F, out);
+    timeline.sample(t, tsample);
+    const seg = tsample.segment;
+    const airT = tsample.airT;
     // stand perpendicular to the ground, fade that out through the axis set and back in for the landing
     let slope = 0;
     if (config.mode === 'skis') {
@@ -294,6 +304,8 @@ export function bake(config: BakeConfig): Baked {
     let rotDeg = 0;
     const qPrev = new THREE.Quaternion();
     const qCur = new THREE.Quaternion();
+    const qTrickPrev = new THREE.Quaternion();
+    const qTrick = new THREE.Quaternion();
     const comLocal = new THREE.Vector3();
     const feetLocal = new THREE.Vector3();
     const headLocal = new THREE.Vector3();
@@ -311,12 +323,15 @@ export function bake(config: BakeConfig): Baked {
       const inAir = seg === 'flight';
 
       orientationAt(i, F, qCur);
-      if (i === 0) qPrev.copy(qCur);
+      trickOrientationAt(i, F, qTrick);
+      if (i === 0) { qPrev.copy(qCur); qTrickPrev.copy(qTrick); }
       angularVelocityBetween(qPrev, qCur, dt, omega);
       if (i === 0) omega.set(0, 0, 0);
-      const step = i === 0 ? 0 : relativeAngle(qPrev, qCur);
+      // google's rotational degrees, measured on the trick rotation only
+      const step = i === 0 ? 0 : relativeAngle(qTrickPrev, qTrick);
       if (seg === 'set' || inAir) rotDeg += step / DEG;
       qPrev.copy(qCur);
+      qTrickPrev.copy(qTrick);
 
       omegaBody.copy(omega).applyQuaternion(_q.copy(qCur).invert());
       spinAngle += omegaBody.y * dt;
