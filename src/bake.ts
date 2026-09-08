@@ -312,7 +312,13 @@ export function bake(config: BakeConfig): Baked {
     const headLocal = new THREE.Vector3();
     const omega = new THREE.Vector3();
     const omegaBody = new THREE.Vector3();
-    const axisBody = new THREE.Vector3();
+    const spineAxis = new THREE.Vector3(0, 1, 0);
+    const transverseAxis = new THREE.Vector3();
+    // the spin axis sits at angle alpha from the spine. precession runs on the transverse
+    // inertia, twist on the longitudinal one, so the rate blends the two by cos alpha
+    const cosA = clamp(Math.abs(path.axisBodyAtSet.y), 0, 1);
+    transverseAxis.copy(path.axisBodyAtSet).addScaledVector(spineAxis, -path.axisBodyAtSet.y);
+    if (transverseAxis.lengthSq() < 1e-6) transverseAxis.set(1, 0, 0); else transverseAxis.normalize();
 
     for (let i = 0; i < n; i++) {
       const t = times[i];
@@ -365,11 +371,10 @@ export function bake(config: BakeConfig): Baked {
       feetPoint(figure, feetLocal);
       headPoint(figure, headLocal);
 
-      // inertia about the spin axis fixed in the body at the set, so it changes with the
-      // shape (tuck, open) and not with where the body is in its precession
-      axisBody.copy(path.axisBodyAtSet).normalize();
-      if (axisBody.lengthSq() < 0.5) axisBody.set(0, 1, 0);
-      const I = figure.computeInertia(axisBody, comLocal);
+      // effective inertia of the posed body: 1 / I = (1 - cos a) / It + cos a / Il
+      const Il = figure.computeInertia(spineAxis, comLocal);
+      const It = figure.computeInertia(transverseAxis, comLocal);
+      const I = 1 / ((1 - cosA) / Math.max(0.2, It) + cosA / Math.max(0.2, Il));
       if (inertiaOut) inertiaOut[i] = I;
 
       if (!final) continue;
