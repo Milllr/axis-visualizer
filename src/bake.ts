@@ -361,8 +361,9 @@ export function bake(config: BakeConfig): Baked {
       feetPoint(figure, feetLocal);
       headPoint(figure, headLocal);
 
-      // inertia about the momentum axis in body space
-      axisBody.copy(path.Lhat).applyQuaternion(_q.copy(qCur).invert()).normalize();
+      // inertia about the spin axis fixed in the body at the set, so it changes with the
+      // shape (tuck, open) and not with where the body is in its precession
+      axisBody.copy(path.axisBodyAtSet).normalize();
       if (axisBody.lengthSq() < 0.5) axisBody.set(0, 1, 0);
       const I = figure.computeInertia(axisBody, comLocal);
       if (inertiaOut) inertiaOut[i] = I;
