@@ -118,7 +118,7 @@ export function createBakedFrame(): BakedFrame {
 const BAKE_DT = 1 / 120;
 // the pop: the last moments on the lip where the legs extend, the throw releases and the
 // momentum is created. fixed length whatever the trick, a bigger trick winds up longer
-const POP_DURATION = 0.12;
+const POP_DURATION = 0.11;
 const THROW_LEAD = 0.10;
 const UP = new THREE.Vector3(0, 1, 0);
 const ZAXIS = new THREE.Vector3(0, 0, 1);
@@ -224,7 +224,7 @@ export function bake(config: BakeConfig): Baked {
   const momentumShape = (t: number): number => {
     if (t < popStart) return 0;
     // momentum arrives at the very end of the pop, so little rotation happens on the lip
-    if (t < flightStart) { const u = popBlendAt(t); return u * u * u; }
+    if (t < flightStart) { const u = popBlendAt(t); return u * u * u * u; }
     if (t <= rotEnd) return 1;
     return 0;
   };
