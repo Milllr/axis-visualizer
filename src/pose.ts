@@ -361,6 +361,8 @@ export class PoseSolver {
     const phase = t < 0.08 ? 'takeoff' : t < 0.18 ? 'axis_set' : t < 0.68 ? 'main' : t < 0.82 ? 'spot' : t < 0.94 ? 'land_prep' : 'absorb';
     const phaseP = phase === 'land_prep' ? clamp01((t - 0.82) / 0.12) : phase === 'absorb' ? clamp01((t - 0.94) / 0.06) : 0;
     const landFade = phase === 'land_prep' ? phaseP : phase === 'absorb' ? 1 : 0;
+    // the arms start to open as soon as the landing is spotted, snowbox spotOpen timing
+    const openFade = smoothstep((t - 0.68) / 0.22);
 
     const omegaLen = Math.hypot(inp.omegaX, inp.omegaY, inp.omegaZ);
     const flipRate = Math.abs(inp.omegaX);
@@ -579,11 +581,11 @@ export class PoseSolver {
       else { sRz += armAsym * 0.35; sLz += armAsym * 0.12; eRx += armAsym * 0.45; }
     }
 
-    if (landFade > 0) {
+    if (openFade > 0) {
       // arms come wide as the landing is spotted, which is what slows the spin
-      sLx = lerp(sLx, 0.25, landFade * 0.7); sLz = lerp(sLz, 1.15, landFade * 0.7);
-      sRx = lerp(sRx, 0.25, landFade * 0.7); sRz = lerp(sRz, 1.15, landFade * 0.7);
-      eLx = lerp(eLx, 0.2, landFade * 0.6); eRx = lerp(eRx, 0.2, landFade * 0.6);
+      sLx = lerp(sLx, 0.25, openFade * 0.9); sLz = lerp(sLz, 1.35, openFade * 0.9);
+      sRx = lerp(sRx, 0.25, openFade * 0.9); sRz = lerp(sRz, 1.35, openFade * 0.9);
+      eLx = lerp(eLx, 0.15, openFade * 0.8); eRx = lerp(eRx, 0.15, openFade * 0.8);
     }
 
     // throw arm sweeps, family specific
@@ -675,8 +677,8 @@ export class PoseSolver {
     }
 
     // sustained off axis shape once the rotation is going, released as the landing is spotted
-    if (isCombo && totalStr > 0.2 && landFade < 1) {
-      const comboStr = totalStr * 0.6 * (1 - landFade);
+    if (isCombo && totalStr > 0.2 && openFade < 1) {
+      const comboStr = totalStr * 0.6 * (1 - openFade);
       const leadIsL = s > 0;
       if (fam === 'cork' || fam === 'dspin') {
         if (leadIsL) {
@@ -715,7 +717,7 @@ export class PoseSolver {
     }
     // lincoln: arms overhead like a cartwheel
     if (fam === 'lincoln' && totalStr > 0.2) {
-      const c = totalStr * 0.6 * (1 - landFade);
+      const c = totalStr * 0.6 * (1 - openFade);
       sLz = lerp(sLz, 2.4, c); sRz = lerp(sRz, 2.4, c);
       sLx = lerp(sLx, 0.1, c); sRx = lerp(sRx, 0.1, c);
       eLx = lerp(eLx, 0.2, c); eRx = lerp(eRx, 0.2, c);
