@@ -14,11 +14,11 @@ renders an articulated skier with real segment masses through a whole jump: appr
 
 off axis tricks take a corks count, so a cork 1080 and a double cork 1080 can sit side by side.
 
-## two axis models
+## the axis model
 
-**rigid body.** once the skier leaves the lip the angular momentum vector `L` is fixed in the world. the spine precesses around `L` once per cork (that is the dip) while the body twists about its own long axis for the rest of the heading. a cork 720 is one precession plus one twist, a double cork 1260 is two precessions plus one and a half twists. this is the yeadon twisting somersault model, and it reproduces the rotational degrees shortcut google measured on real corks: the body travels fewer degrees than the trick name says because precession and twist combine into a diagonal.
+once the skier leaves the lip the angular momentum vector `L` is fixed in the world. the spine precesses around `L` once per cork (that is the dip) while the body twists about its own long axis for the rest of the heading. a cork 720 is one precession plus one twist, a double cork 1080 is two precessions plus one twist. this is the yeadon twisting somersault model, and it reproduces the rotational degrees shortcut google measured on real corks: the body travels fewer degrees than the trick name says because precession and twist combine into a diagonal.
 
-**snowbox.** the body rotates about one fixed tilted axis for the full nominal degrees, the way the game snowbox does it, cork at 48°, rodeo at 62°, bio at 61°, plus snowbox's closed form misty path. rotational degrees always equal the nominal here, and a 540 can only land clean with the landing pull.
+a double or triple is a chain of corks and you choose how the heading is shared between them, so a double cork 1080 can be a cork 7 into a cork 3 or a cork 3 into a cork 7. the twist rate changes between the corks, which is the arm adjustment the skier makes.
 
 ## what is modelled
 
@@ -32,7 +32,7 @@ off axis tricks take a corks count, so a cork 1080 and a double cork 1080 can si
 ## features
 
 - multi panel view, compare up to 4 tricks side by side
-- rigid body or snowbox axis model per panel
+- cork split per panel for doubles and triples
 - skis or trampoline scene per panel, same timing so panels stay in sync
 - playback with scrubbing and speeds from 0.1x to 2x
 - overlays: ghosts, momentum arrow, spin axis, rotation disk, body frame, center of mass, head path, cork ribbon, flight path
