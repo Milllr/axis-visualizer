@@ -124,11 +124,11 @@ export function createOverlays(): Overlays {
   pathLine.frustumCulled = false;
   group.add(pathLine);
 
-  const ribbonMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false });
+  const ribbonMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.30, side: THREE.DoubleSide, depthWrite: false });
   const ribbon = new THREE.Mesh(new THREE.BufferGeometry(), ribbonMat);
   ribbon.frustumCulled = false;
   group.add(ribbon);
-  const ribbonFaintMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.10, side: THREE.DoubleSide, depthWrite: false });
+  const ribbonFaintMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false });
   const ribbonFaint = new THREE.Mesh(new THREE.BufferGeometry(), ribbonFaintMat);
   ribbonFaint.frustumCulled = false;
   group.add(ribbonFaint);
