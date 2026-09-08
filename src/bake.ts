@@ -314,9 +314,11 @@ export function bake(config: BakeConfig): Baked {
     const omegaBody = new THREE.Vector3();
     const spineAxis = new THREE.Vector3(0, 1, 0);
     const transverseAxis = new THREE.Vector3();
-    // the spin axis sits at angle alpha from the spine. precession runs on the transverse
-    // inertia, twist on the longitudinal one, so the rate blends the two by cos alpha
-    const cosA = clamp(Math.abs(path.axisBodyAtSet.y), 0, 1);
+    // precession runs on the transverse inertia, twist on the longitudinal one, so the
+    // rate blends the two by how much of the trick is each
+    const precShare = path.precessionRad + path.twistRad > 1e-6
+      ? path.precessionRad / (path.precessionRad + path.twistRad) : 0;
+    const cosA = 1 - precShare;
     transverseAxis.copy(path.axisBodyAtSet).addScaledVector(spineAxis, -path.axisBodyAtSet.y);
     if (transverseAxis.lengthSq() < 1e-6) transverseAxis.set(1, 0, 0); else transverseAxis.normalize();
 
@@ -530,6 +532,7 @@ function makeInput(
     flipDir,
     channels: ZERO_CHANNELS,
     tuck: 0,
+    tuckDepth: trick.tuckDepth,
     omegaX: 0, omegaY: 0, omegaZ: 0,
     spinAngle: 0, flipAngle: 0, comboAngle: 0,
     grab: 'none',

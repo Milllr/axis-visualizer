@@ -191,6 +191,8 @@ export interface PoseInput {
   channels: PoseChannels;
   // tuck used by the inertia, 0 to 1
   tuck: number;
+  // family tuck depth, 1 is a full somersault tuck
+  tuckDepth: number;
   // body frame angular velocity, rad/s
   omegaX: number;
   omegaY: number;
@@ -371,7 +373,7 @@ export class PoseSolver {
     const rollDir = inp.omegaZ >= 0 ? 1 : -1;
 
     // tuck with inertial lag
-    const tuckTarget = Math.max(ch.tuck, inp.tuck);
+    const tuckTarget = clamp01(Math.max(ch.tuck, inp.tuck)) * inp.tuckDepth;
     const inertiaDelay = CFG.tuckInertiaLag * Math.min(1, omegaLen / 8);
     const tuckRate = 1 - Math.exp(-(1 / Math.max(0.02, inertiaDelay + 0.04)) * dt);
     this.laggedTuck += (clamp01(tuckTarget) - this.laggedTuck) * tuckRate;

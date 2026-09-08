@@ -30,6 +30,8 @@ export interface TrickDefinition {
   // off axis families take a corks count (single, double, triple)
   hasInversions: boolean;
   description: string;
+  // how deep the body folds in the air, 1 is a full somersault tuck, corks stay laid out
+  tuckDepth: number;
   rigid: RigidAxisParams;
   // fixed axis unit weights (pitch, yaw, roll) used by the snowbox model
   snowboxAxis: { pitch: number; yaw: number; roll: number };
@@ -52,6 +54,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: false,
     description: 'Pure horizontal rotation around the vertical axis',
+    tuckDepth: 0.5,
     rigid: { tiltDeg: 0, rollShare: 0, leanDeg: 0 },
     snowboxAxis: unit(0, 1, 0),
     color: 0x00ff88,
@@ -66,6 +69,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: false,
     hasInversions: false,
     description: 'Forward somersault around the lateral axis',
+    tuckDepth: 1.0,
     rigid: { tiltDeg: 90, rollShare: 0, leanDeg: 0 },
     snowboxAxis: unit(1, 0, 0),
     color: 0xff6644,
@@ -80,6 +84,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: false,
     hasInversions: false,
     description: 'Backward somersault around the lateral axis',
+    tuckDepth: 1.0,
     rigid: { tiltDeg: 90, rollShare: 0, leanDeg: 0 },
     snowboxAxis: unit(1, 0, 0),
     color: 0xff6644,
@@ -94,6 +99,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: false,
     description: 'Sideways cartwheel around the direction of travel',
+    tuckDepth: 0.5,
     rigid: { tiltDeg: 90, rollShare: 1, leanDeg: 0 },
     snowboxAxis: unit(0, 0, 1),
     color: 0xffaa00,
@@ -110,6 +116,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: true,
     description: 'Off axis spin leaning back over the tails, never fully inverted',
+    tuckDepth: 0.55,
     rigid: { tiltDeg: 36, rollShare: 0.4, leanDeg: 8 },
     snowboxAxis: unit(0.568, 0.669, 0.479),
     color: 0x44aaff,
@@ -124,6 +131,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: true,
     description: 'Backflip thrown over one shoulder with spin, inverted',
+    tuckDepth: 0.85,
     rigid: { tiltDeg: 58, rollShare: 0.3, leanDeg: 18 },
     snowboxAxis: unit(0.747, 0.472, 0.468),
     color: 0xff44aa,
@@ -138,6 +146,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: true,
     description: 'Inverted cork thrown back and sideways, head well below the feet',
+    tuckDepth: 0.75,
     rigid: { tiltDeg: 72, rollShare: 0.25, leanDeg: 20 },
     snowboxAxis: unit(0.90, 0.26, 0.35),
     color: 0xaa44ff,
@@ -154,6 +163,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: true,
     description: 'Forward cork, the lead shoulder dips toward the landing',
+    tuckDepth: 0.55,
     rigid: { tiltDeg: 36, rollShare: 0.4, leanDeg: 8 },
     snowboxAxis: unit(0.808, 0.491, 0.326),
     color: 0x44ffaa,
@@ -168,6 +178,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: true,
     description: 'Frontflip thrown over a dropped shoulder with spin, lands switch at 540',
+    tuckDepth: 0.8,
     rigid: { tiltDeg: 55, rollShare: 0.35, leanDeg: 15 },
     snowboxAxis: unit(0.759, 0.447, 0.473),
     color: 0xff8844,
@@ -182,6 +193,7 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     hasSide: true,
     hasInversions: true,
     description: 'Laid out spin on a nearly horizontal axis, chest to the sky at the apex',
+    tuckDepth: 0.45,
     rigid: { tiltDeg: 75, rollShare: 0.6, leanDeg: 15 },
     snowboxAxis: unit(0.80, 0.26, 0.54),
     color: 0xffff44,
