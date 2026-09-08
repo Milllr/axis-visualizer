@@ -325,7 +325,10 @@ export function bake(config: BakeConfig): Baked {
       orientationAt(i, F, qCur);
       trickOrientationAt(i, F, qTrick);
       if (i === 0) { qPrev.copy(qCur); qTrickPrev.copy(qTrick); }
-      angularVelocityBetween(qPrev, qCur, dt, omega);
+      // angular velocity of the trick rotation, carried into the world frame by the ground alignment
+      angularVelocityBetween(qTrickPrev, qTrick, dt, omega);
+      _q2.copy(qCur).multiply(_q.copy(qTrick).invert());
+      omega.applyQuaternion(_q2);
       if (i === 0) omega.set(0, 0, 0);
       // google's rotational degrees, measured on the trick rotation only
       const step = i === 0 ? 0 : relativeAngle(qTrickPrev, qTrick);
