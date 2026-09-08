@@ -49,7 +49,7 @@ export interface Overlays {
 
 const GHOST_COUNT = 8;
 const GHOST_OPACITY = 0.10;
-const RIBBON_HALF = 0.85;
+const RIBBON_HALF = 0.6;
 
 function axisColor(tilt01: number, target: THREE.Color): THREE.Color {
   // snowbox: green for vertical, cyan around 45 degrees, red for horizontal
