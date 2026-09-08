@@ -65,6 +65,8 @@ export interface TimelineOptions {
   takeoffComAlong: number;
   // com height above the landing surface at touchdown
   landingComHeight: number;
+  // seconds spent setting on the lip, longer for bigger tricks
+  setDuration?: number;
 }
 
 export interface PathPoint {
@@ -149,7 +151,8 @@ export class Timeline {
     this.approachPath = buildApproachPath();
     const pathLen = this.approachPath[this.approachPath.length - 1].s;
     const groundTime = pathLen / KICKER.speed;
-    const approachDur = Math.max(0.3, groundTime - TIMING.set);
+    const setDur = opts.setDuration ?? TIMING.set;
+    const approachDur = Math.max(0.3, groundTime - setDur);
 
     // takeoff state from the lip
     const lipA = KICKER.lipAngle * DEG;
@@ -177,7 +180,7 @@ export class Timeline {
       t += dur;
     };
     push('approach', approachDur);
-    push('set', TIMING.set);
+    push('set', setDur);
     push('flight', flight);
     push('landing', TIMING.landing);
     push('rideout', TIMING.rideout);

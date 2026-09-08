@@ -170,17 +170,23 @@ export function bake(config: BakeConfig): Baked {
   const solver = new PoseSolver();
   const joints = createJointAngles();
   const tsample = createTimelineSample();
-  const throwIntensity = clamp(0.7 + 0.4 * (config.rotationDeg / 720), 0.8, 1.5);
+  // bigger tricks wind up longer, set longer and throw harder
+  const bigness = config.rotationDeg / 720;
+  const setDuration = clamp(0.2 + 0.12 * bigness, 0.25, 0.5);
+  const throwIntensity = clamp(0.55 + 0.5 * bigness, 0.75, 1.6);
+  const windupPeak = clamp(0.55 + 0.45 * bigness, 0.7, 1.4);
+  const windupRamp = 0.3 + 0.2 * bigness;
+  const setup: SetupParams = { setDuration, throwIntensity, windupPeak, windupRamp, throwDuration: Math.max(0.5, setDuration + 0.25) };
 
   // ── pass 0: pose through the approach and set to find the com over the feet ──
-  let timeline = new Timeline({ mode: config.mode, takeoffComUp: 0.92, takeoffComAlong: 0.05, landingComHeight: 0.88 });
+  let timeline = new Timeline({ mode: config.mode, takeoffComUp: 0.92, takeoffComAlong: 0.05, landingComHeight: 0.88, setDuration });
   const measureOffsets = (tl: Timeline) => {
     solver.reset();
     const input = makeInput(config.mode, trick, spinDir, flipDir, offAxis);
     let comLocal = new THREE.Vector3(), feetLocal = new THREE.Vector3();
     for (let t = 0; t <= tl.setStart + 0.25 + 1e-6; t += BAKE_DT) {
       tl.sample(t, tsample);
-      fillGroundInput(input, t, BAKE_DT, tsample, tl, config, throwIntensity);
+      fillGroundInput(input, t, BAKE_DT, tsample, tl, config, setup);
       const pose = solver.solve(input);
       poseToJoints(pose, joints);
       applyPose(figure, joints);
@@ -194,7 +200,7 @@ export function bake(config: BakeConfig): Baked {
     return { up: d.y, along: d.z };
   };
   const off = measureOffsets(timeline);
-  timeline = new Timeline({ mode: config.mode, takeoffComUp: off.up, takeoffComAlong: off.along, landingComHeight: 0.88 });
+  timeline = new Timeline({ mode: config.mode, takeoffComUp: off.up, takeoffComAlong: off.along, landingComHeight: 0.88, setDuration });
 
   const duration = timeline.duration;
   const n = Math.ceil(duration / BAKE_DT) + 1;
@@ -357,7 +363,7 @@ export function bake(config: BakeConfig): Baked {
       const ch = inAir ? sampleChannels(profile, airT, spinDir, flipDir) : ZERO_CHANNELS;
       const tuck = inAir ? effectiveTuck(ch.tuck, airT, offAxis) : 0;
 
-      fillGroundInput(input, t, dt, tsample, timeline, config, throwIntensity);
+      fillGroundInput(input, t, dt, tsample, timeline, config, setup);
       input.channels = ch;
       input.tuck = tuck;
       input.omegaX = omegaBody.x; input.omegaY = omegaBody.y; input.omegaZ = omegaBody.z;
@@ -539,11 +545,20 @@ function makeInput(
     grabBlend: 0,
     throwTime: -1,
     throwIntensity: 1,
+    throwDuration: 0.5,
     windup: 0,
     landTime: -1,
     landingImpact: 0,
     groundPitch: 0,
   };
+}
+
+interface SetupParams {
+  setDuration: number;
+  throwIntensity: number;
+  throwDuration: number;
+  windupPeak: number;
+  windupRamp: number;
 }
 
 function fillGroundInput(
@@ -553,7 +568,7 @@ function fillGroundInput(
   ts: TimelineSample,
   tl: Timeline,
   config: BakeConfig,
-  throwIntensity: number,
+  setup: SetupParams,
 ): void {
   input.dt = dt;
   input.time = t;
@@ -562,9 +577,10 @@ function fillGroundInput(
   input.airT = ts.airT;
   input.grab = config.grab;
   input.throwTime = t - tl.setStart;
-  input.throwIntensity = throwIntensity;
-  input.windup = clamp01((t - (tl.setStart - 0.45)) / 0.40);
-  if (t >= tl.setStart) input.windup = 1;
+  input.throwIntensity = setup.throwIntensity;
+  input.throwDuration = setup.throwDuration;
+  input.windup = setup.windupPeak * clamp01((t - (tl.setStart - setup.windupRamp)) / setup.windupRamp);
+  if (t >= tl.setStart) input.windup = setup.windupPeak;
   input.landTime = t - tl.flightEnd;
   const vyLand = tl.takeoffVel.y - GRAVITY * tl.flightTime;
   input.landingImpact = clamp(Math.abs(vyLand) / 8, 0.4, 1.5);

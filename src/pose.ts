@@ -206,6 +206,7 @@ export interface PoseInput {
   // seconds since the throw began, negative before the set
   throwTime: number;
   throwIntensity: number;
+  throwDuration: number;
   // 0 to 1 wind up during the approach
   windup: number;
   // seconds since touchdown, negative while airborne
@@ -299,7 +300,7 @@ export class PoseSolver {
   // approach stance: ski crouch with the wind up, or a trampoline bounce stance
   private solveGround(inp: PoseInput, out: SemanticPose): void {
     copyPose(REST, out);
-    const wu = clamp01(inp.windup);
+    const wu = clamp(inp.windup, 0, 1.5);
     const s = inp.spinDir;
     const f = inp.flipDir;
     if (inp.mode === 'skis') {
@@ -403,9 +404,10 @@ export class PoseSolver {
     let throwHip = 0, throwNeckWhip = 0, throwNeckTilt = 0, throwShoulderDrop = 0;
     let throwKnee = 0;
     let osL = 0, osR = 0;
-    const throwActive = inp.throwTime >= 0 && inp.throwTime < CFG.throwDuration;
+    const throwDuration = inp.throwDuration > 0 ? inp.throwDuration : CFG.throwDuration;
+    const throwActive = inp.throwTime >= 0 && inp.throwTime < throwDuration;
     if (throwActive) {
-      const tt = inp.throwTime / CFG.throwDuration;
+      const tt = inp.throwTime / throwDuration;
       throwProgress = clamp01(tt);
       throwBlend = tt < 0.3 ? Math.sin(tt / 0.3 * HALF_PI) : Math.cos((tt - 0.3) / 0.7 * HALF_PI);
       throwBlend = clamp01(throwBlend);
