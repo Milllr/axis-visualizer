@@ -1,31 +1,32 @@
 import * as THREE from 'three';
-import { TRICK_DEFINITIONS } from './tricks';
-import { createStickFigure } from './stickFigure';
-import {
-  createAnimationState,
-  getArcPosition,
-  getRotationQuaternion,
-  stepAnimation,
-} from './animation';
-import { createAxisArrow, updateAxisArrow, createGhostTrail, updateGhostTrail, type GhostTrail } from './axisVisualizer';
-import { createPanelScene, type PanelScene } from './scene';
+import { createFigure, applyPose, SEG } from './figure';
+import type { Figure } from './figure';
+import { createPanelScene } from './scene';
+import type { PanelScene } from './scene';
 import { computeViewports, renderPanels } from './multiView';
-import { createPanelUI, createPlaybackUI, type PanelUI, type PanelConfig } from './ui';
+import { createPanelUI, createPlaybackUI } from './ui';
+import type { PanelUI, PanelConfig } from './ui';
+import { bake, createBakedFrame } from './bake';
+import type { Baked, BakedFrame } from './bake';
+import { createOverlays, DEFAULT_FLAGS } from './overlays';
+import type { Overlays, OverlayFlags } from './overlays';
 
 interface Panel {
   panelScene: PanelScene;
-  figure: THREE.Group;
-  axisArrow: THREE.ArrowHelper;
-  ghostTrail: GhostTrail;
-  animState: ReturnType<typeof createAnimationState>;
+  figure: Figure;
+  overlays: Overlays;
+  baked: Baked;
+  frame: BakedFrame;
   ui: PanelUI;
 }
 
 const MAX_PANELS = 4;
 const panels: Panel[] = [];
 let globalPlaying = false;
-let globalSpeed = 1;
-let showGhosts = true;
+let globalSpeed = 0.5;
+let globalT = 0; // 0 to 1 over each panel's timeline
+let follow = true;
+const flags: OverlayFlags = { ...DEFAULT_FLAGS };
 
 const canvas = document.getElementById('render-canvas') as HTMLCanvasElement;
 const panelsUiContainer = document.getElementById('panels-ui') as HTMLDivElement;
@@ -37,90 +38,89 @@ renderer.setClearColor(0x111111);
 
 function resizeCanvas(): void {
   const parent = canvas.parentElement!;
-  const w = parent.clientWidth;
-  const h = parent.clientHeight;
-  renderer.setSize(w, h);
+  renderer.setSize(parent.clientWidth, parent.clientHeight);
 }
 
-// scope orbit controls to the viewport region the mouse is hovering over
-let activeControlsPanel: Panel | null = null;
-
+// scope orbit controls to the viewport under the pointer
 canvas.addEventListener('pointerdown', (e) => {
   const rect = canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left;
   const my = e.clientY - rect.top;
   const vps = computeViewports(panels.length, canvas.clientWidth, canvas.clientHeight);
-
-  panels.forEach(p => { p.panelScene.controls.enabled = false; });
-
+  panels.forEach((p) => { p.panelScene.controls.enabled = false; });
   for (let i = 0; i < panels.length; i++) {
     const vp = vps[i];
     if (!vp) continue;
-    const domLeft = vp.x / (canvas.width / canvas.clientWidth);
-    const domTop = (canvas.height - vp.y - vp.height) / (canvas.height / canvas.clientHeight);
-    const domW = vp.width / (canvas.width / canvas.clientWidth);
-    const domH = vp.height / (canvas.height / canvas.clientHeight);
-
+    const scale = canvas.width / canvas.clientWidth;
+    const domLeft = vp.x / scale;
+    const domTop = (canvas.height - vp.y - vp.height) / scale;
+    const domW = vp.width / scale;
+    const domH = vp.height / scale;
     if (mx >= domLeft && mx <= domLeft + domW && my >= domTop && my <= domTop + domH) {
       panels[i].panelScene.controls.enabled = true;
-      activeControlsPanel = panels[i];
       break;
     }
   }
 });
 
-canvas.addEventListener('pointerup', () => {
-  activeControlsPanel = null;
-});
+function configToBake(config: PanelConfig) {
+  return {
+    trickKey: config.trickKey,
+    rotationDeg: config.rotationDeg,
+    inversions: config.inversions,
+    spinDir: config.side,
+    isSwitch: config.isSwitch,
+    model: config.model,
+    mode: config.mode,
+    grab: config.grab,
+  };
+}
 
-// --- panel management ---
-
-function findPanelIndex(panel: Panel): number {
-  return panels.indexOf(panel);
+function rebuildPanel(panel: Panel, config: PanelConfig): void {
+  panel.baked = bake(configToBake(config));
+  panel.figure.setSkis(config.mode === 'skis');
+  panel.panelScene.setMode(config.mode);
+  panel.overlays.rebuild(panel.baked);
+  panel.ui.setSummary(panel.baked.summary);
+  panel.baked.sampleAt(globalT * panel.baked.duration, panel.frame);
+  panel.panelScene.follow(panel.frame.pivotPos, true);
 }
 
 function addPanel(): void {
   if (panels.length >= MAX_PANELS) return;
 
-  const defaultTrick = 'spin';
-  const trick = TRICK_DEFINITIONS[defaultTrick];
-  const defaultRot = trick.rotations[0];
-
   const panelScene = createPanelScene(canvas);
-  const figure = createStickFigure();
-  panelScene.scene.add(figure);
+  const figure = createFigure(true);
+  panelScene.scene.add(figure.group);
+  const overlays = createOverlays();
+  panelScene.scene.add(overlays.group);
 
-  const axisArrow = createAxisArrow(defaultTrick);
-  panelScene.scene.add(axisArrow);
-
-  const ghostTrail = createGhostTrail(createStickFigure);
-  for (const g of ghostTrail.ghosts) {
-    panelScene.scene.add(g);
-  }
-
-  const animState = createAnimationState(defaultTrick, trick, defaultRot, false, 1);
-
-  const panelIndex = panels.length;
-  const panelRef: Panel = { panelScene, figure, axisArrow, ghostTrail, animState, ui: null! };
+  const panelRef: Panel = {
+    panelScene,
+    figure,
+    overlays,
+    baked: null!,
+    frame: createBakedFrame(),
+    ui: null!,
+  };
 
   const ui = createPanelUI(
-    panelIndex,
-    (config: PanelConfig) => {
-      const idx = findPanelIndex(panelRef);
-      if (idx >= 0) onPanelConfigChange(idx, config);
-    },
+    panels.length,
+    (config: PanelConfig) => rebuildPanel(panelRef, config),
     () => {
-      const idx = findPanelIndex(panelRef);
+      const idx = panels.indexOf(panelRef);
       if (idx >= 0) removePanel(idx);
     },
   );
-
   panelRef.ui = ui;
   panelsUiContainer.appendChild(ui.container);
-
   panels.push(panelRef);
-  if (globalPlaying) panelRef.animState.playing = true;
-  panelRef.animState.speed = globalSpeed;
+
+  rebuildPanel(panelRef, ui.config);
+  // start the view a little behind and to the side of the skier
+  panelScene.camera.position.copy(panelRef.frame.pivotPos).add(new THREE.Vector3(6.5, 2.5, -3.5));
+  panelScene.controls.target.copy(panelRef.frame.pivotPos);
+  panelScene.controls.update();
   updateViewports();
 }
 
@@ -128,45 +128,23 @@ function removePanel(index: number): void {
   if (panels.length <= 1) return;
   const panel = panels[index];
   panel.ui.container.remove();
-
+  panel.overlays.dispose();
   panel.panelScene.scene.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
       obj.geometry.dispose();
-      if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+      if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
       else obj.material.dispose();
     }
   });
   panel.panelScene.controls.dispose();
-
   panels.splice(index, 1);
-
-  panels.forEach((p, i) => {
-    const label = p.ui.container.querySelector('.panel-label');
-    if (label) label.textContent = `#${i + 1}`;
-  });
-
+  panels.forEach((p, i) => p.ui.setLabel(`#${i + 1}`));
   updateViewports();
-}
-
-function onPanelConfigChange(index: number, config: PanelConfig): void {
-  const panel = panels[index];
-  if (!panel) return;
-
-  const trick = TRICK_DEFINITIONS[config.trickKey];
-  panel.animState.trickKey = config.trickKey;
-  panel.animState.trick = trick;
-  panel.animState.rotationDeg = config.rotationDeg;
-  panel.animState.isSwitch = config.isSwitch;
-  panel.animState.side = config.side;
-  panel.animState.t = 0;
-
-  updateAxisArrow(panel.axisArrow, config.trickKey);
 }
 
 function updateViewports(): void {
   resizeCanvas();
   const vps = computeViewports(panels.length, canvas.width, canvas.height);
-
   panels.forEach((p, i) => {
     const vp = vps[i];
     if (!vp) return;
@@ -175,75 +153,65 @@ function updateViewports(): void {
   });
 }
 
-// --- playback ---
+// ── playback ──
 
 const playbackUI = createPlaybackUI(
   () => {
     globalPlaying = !globalPlaying;
     playbackUI.playBtn.textContent = globalPlaying ? '⏸ pause' : '▶ play';
     playbackUI.playBtn.classList.toggle('playing', globalPlaying);
-    panels.forEach(p => { p.animState.playing = globalPlaying; });
   },
-  (t: number) => {
-    panels.forEach(p => { p.animState.t = t; });
-  },
-  (speed: number) => {
-    globalSpeed = speed;
-    panels.forEach(p => { p.animState.speed = speed; });
-  },
+  (t: number) => { globalT = t; },
+  (speed: number) => { globalSpeed = speed; },
   () => addPanel(),
-  (on: boolean) => { showGhosts = on; },
+  (flag, on) => { flags[flag] = on; },
+  (on) => { follow = on; },
+  flags,
 );
-
 playbackBarContainer.innerHTML = '';
-playbackBarContainer.appendChild(playbackUI.container);
-while (playbackUI.container.firstChild) {
-  playbackBarContainer.appendChild(playbackUI.container.firstChild);
-}
-playbackUI.container.remove();
+while (playbackUI.container.firstChild) playbackBarContainer.appendChild(playbackUI.container.firstChild);
 
-// --- render loop ---
+// ── render loop ──
 
 let prevTime = performance.now();
+const _offset = new THREE.Vector3();
 
 function animate(): void {
   requestAnimationFrame(animate);
-
   const now = performance.now();
   const dt = Math.min((now - prevTime) / 1000, 0.1);
   prevTime = now;
 
+  if (globalPlaying && panels.length > 0) {
+    const duration = panels[0].baked.duration;
+    globalT += (dt * globalSpeed) / duration;
+    if (globalT >= 1) globalT = 0;
+  }
+
   for (const panel of panels) {
-    stepAnimation(panel.animState, dt);
+    const { baked, frame, figure } = panel;
+    baked.sampleAt(globalT * baked.duration, frame);
 
-    const { t, trickKey, rotationDeg, isSwitch, trick, side } = panel.animState;
+    applyPose(figure, frame.joints);
+    figure.joints.hip.position.y = SEG.hipHeight - frame.hipDrop;
+    _offset.copy(frame.comLocal).multiplyScalar(-1).applyQuaternion(frame.quat);
+    figure.group.position.copy(frame.pivotPos).add(_offset);
+    figure.group.quaternion.copy(frame.quat);
 
-    panel.figure.position.copy(getArcPosition(t));
-
-    const quat = getRotationQuaternion(trickKey, rotationDeg, isSwitch, t, trick.direction, side);
-    panel.figure.quaternion.copy(quat);
-
-    panel.axisArrow.position.copy(panel.figure.position);
-
-    updateGhostTrail(
-      panel.ghostTrail,
-      t,
-      (gt) => getArcPosition(gt),
-      (gt) => getRotationQuaternion(trickKey, rotationDeg, isSwitch, gt, trick.direction, side),
-      showGhosts,
-    );
+    panel.overlays.update(baked, frame, flags);
+    panel.panelScene.setBedDepth(baked.config.mode === 'trampoline' ? frame.bedDepth : 0);
+    if (follow) panel.panelScene.follow(frame.pivotPos);
+    panel.ui.updateReadout(frame);
   }
 
   if (panels.length > 0) {
-    playbackUI.scrubber.value = String(Math.round(panels[0].animState.t * 1000));
+    playbackUI.scrubber.value = String(Math.round(globalT * 1000));
+    playbackUI.timeLabel.textContent = `${(globalT * panels[0].baked.duration).toFixed(2)}s`;
   }
 
   const vps = computeViewports(panels.length, canvas.width, canvas.height);
-  const panelScenes = panels.map(p => p.panelScene);
-  renderPanels(renderer, panelScenes, vps);
+  renderPanels(renderer, panels.map((p) => p.panelScene), vps);
 }
-
-// --- init ---
 
 window.addEventListener('resize', updateViewports);
 
