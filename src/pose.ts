@@ -117,7 +117,7 @@ export function poseToJoints(p: SemanticPose, out: JointAngles): JointAngles {
   out.neck = [p.neckPitch, p.neckYaw, -p.neckRoll];
   const arm = (a: ArmPose, side: number): [[number, number, number], [number, number, number], [number, number, number]] => [
     [-a.flex, 0, side * a.abduct],
-    [a.elbow, 0, 0],
+    [-a.elbow, 0, 0],
     [-a.wristFlex, 0, side * a.wristTwist],
   ];
   const [sL, eL, wL] = arm(p.armL, 1);
@@ -577,8 +577,8 @@ export class PoseSolver {
 
     const armAsym = Math.max(CFG.armAsymmetry * sStr, Math.abs(ch.armSet));
     if (sStr > 0.15 || Math.abs(ch.armSet) > 0.1) {
-      if (s > 0) { sLz += armAsym * 0.35; sRz += armAsym * 0.12; eLx += armAsym * 0.45; }
-      else { sRz += armAsym * 0.35; sLz += armAsym * 0.12; eRx += armAsym * 0.45; }
+      if (s > 0) { sLz -= armAsym * 0.35; sRz += armAsym * 0.12; eLx += armAsym * 0.45; }
+      else { sRz -= armAsym * 0.35; sLz += armAsym * 0.12; eRx += armAsym * 0.45; }
     }
 
     if (openFade > 0) {
@@ -596,14 +596,14 @@ export class PoseSolver {
           // lead arm reaches across and down, trailing arm sweeps up
           if (leftLeads) {
             sLx = lerp(sLx, sLx + f * throwSweep * 0.5 + osL * 0.8, throwBlend);
-            sLz = lerp(sLz, sLz - throwSweep * 0.6 - throwShoulderDrop * 0.5, throwBlend);
+            sLz = lerp(sLz, sLz + throwSweep * 0.6 + throwShoulderDrop * 0.5, throwBlend);
             sRx = lerp(sRx, sRx - f * throwSweep * 0.3 + osR * 0.6, throwBlend);
             sRz = lerp(sRz, sRz + throwSweep * 0.8 + throwShoulderDrop * 0.3, throwBlend);
           } else {
             sRx = lerp(sRx, sRx + f * throwSweep * 0.5 + osR * 0.8, throwBlend);
-            sRz = lerp(sRz, sRz - throwSweep * 0.6 + throwShoulderDrop * 0.5, throwBlend);
+            sRz = lerp(sRz, sRz + throwSweep * 0.6 + throwShoulderDrop * 0.5, throwBlend);
             sLx = lerp(sLx, sLx - f * throwSweep * 0.3 + osL * 0.6, throwBlend);
-            sLz = lerp(sLz, sLz + throwSweep * 0.8 - throwShoulderDrop * 0.3, throwBlend);
+            sLz = lerp(sLz, sLz + throwSweep * 0.8 + throwShoulderDrop * 0.3, throwBlend);
           }
           eLx = lerp(eLx, eLx + osL * 1.6, throwBlend * 0.5);
           eRx = lerp(eRx, eRx + osR * 1.6, throwBlend * 0.5);
@@ -639,12 +639,12 @@ export class PoseSolver {
             sLx = lerp(sLx, sLx + f * throwSweep * 0.7, throwBlend);
             sLz = lerp(sLz, sLz - throwSweep * 0.5, throwBlend);
             sRx = lerp(sRx, sRx - f * throwSweep * 0.5 + osR, throwBlend);
-            sRz = lerp(sRz, sRz + throwSweep * 0.4, throwBlend);
+            sRz = lerp(sRz, sRz - throwSweep * 0.4, throwBlend);
           } else {
             sRx = lerp(sRx, sRx + f * throwSweep * 0.7, throwBlend);
             sRz = lerp(sRz, sRz - throwSweep * 0.5, throwBlend);
             sLx = lerp(sLx, sLx - f * throwSweep * 0.5 + osL, throwBlend);
-            sLz = lerp(sLz, sLz + throwSweep * 0.4, throwBlend);
+            sLz = lerp(sLz, sLz - throwSweep * 0.4, throwBlend);
           }
           eLx = lerp(eLx, eLx + osL * 1.4, throwBlend * 0.5);
           eRx = lerp(eRx, eRx + osR * 1.4, throwBlend * 0.5);
@@ -656,7 +656,7 @@ export class PoseSolver {
       } else if (fam === 'spin' || fam === 'lincoln') {
         // horizontal arm sweep and body coil
         sLx = lerp(sLx, sLx + s * (throwSweep * 0.6 + osL * 1.5), throwBlend);
-        sRx = lerp(sRx, sRx - s * (throwSweep * 0.6 + osR * 1.5), throwBlend);
+        sRx = lerp(sRx, sRx + s * (throwSweep * 0.6 + osR * 1.5), throwBlend);
         sLz = lerp(sLz, sLz + throwSweep * 0.5 + osL * 0.8, throwBlend);
         sRz = lerp(sRz, sRz + throwSweep * 0.5 + osR * 0.8, throwBlend);
         eLx = lerp(eLx, eLx + osL * 1.8, throwBlend * 0.5);
@@ -677,25 +677,26 @@ export class PoseSolver {
     }
 
     // sustained off axis shape once the rotation is going, released as the landing is spotted
+    // for a left spin the right arm is the one that reaches forward and across
     if (isCombo && totalStr > 0.2 && openFade < 1) {
       const comboStr = totalStr * 0.6 * (1 - openFade);
-      const leadIsL = s > 0;
+      const rightReaches = s > 0;
       if (fam === 'cork' || fam === 'dspin') {
-        if (leadIsL) {
-          sLx = lerp(sLx, 0.7, comboStr); sLz = lerp(sLz, sLz * 0.2 - 0.3, comboStr); eLx = lerp(eLx, 1.4, comboStr);
-          sRz = lerp(sRz, sRz + 0.5, comboStr); eRx = lerp(eRx, 0.3, comboStr);
-        } else {
-          sRx = lerp(sRx, 0.7, comboStr); sRz = lerp(sRz, sRz * 0.2 - 0.3, comboStr); eRx = lerp(eRx, 1.4, comboStr);
+        if (rightReaches) {
+          sRx = lerp(sRx, 0.7, comboStr); sRz = lerp(sRz, sRz * 0.2 + 0.3, comboStr); eRx = lerp(eRx, 1.4, comboStr);
           sLz = lerp(sLz, sLz + 0.5, comboStr); eLx = lerp(eLx, 0.3, comboStr);
+        } else {
+          sLx = lerp(sLx, 0.7, comboStr); sLz = lerp(sLz, sLz * 0.2 + 0.3, comboStr); eLx = lerp(eLx, 1.4, comboStr);
+          sRz = lerp(sRz, sRz + 0.5, comboStr); eRx = lerp(eRx, 0.3, comboStr);
         }
         spineZ = lerp(spineZ, spineZ + s * 0.25 * totalStr, comboStr);
       } else if (isMisty) {
-        if (leadIsL) {
-          sLx = lerp(sLx, 0.92, comboStr); sLz = lerp(sLz, -0.24, comboStr); eLx = lerp(eLx, 1.28, comboStr);
-          sRx = lerp(sRx, 0.42, comboStr * 0.85); sRz = lerp(sRz, 0.36, comboStr * 0.85); eRx = lerp(eRx, 0.72, comboStr * 0.85);
-        } else {
+        if (rightReaches) {
           sRx = lerp(sRx, 0.92, comboStr); sRz = lerp(sRz, -0.24, comboStr); eRx = lerp(eRx, 1.28, comboStr);
           sLx = lerp(sLx, 0.42, comboStr * 0.85); sLz = lerp(sLz, 0.36, comboStr * 0.85); eLx = lerp(eLx, 0.72, comboStr * 0.85);
+        } else {
+          sLx = lerp(sLx, 0.92, comboStr); sLz = lerp(sLz, -0.24, comboStr); eLx = lerp(eLx, 1.28, comboStr);
+          sRx = lerp(sRx, 0.42, comboStr * 0.85); sRz = lerp(sRz, 0.36, comboStr * 0.85); eRx = lerp(eRx, 0.72, comboStr * 0.85);
         }
         spineX = lerp(spineX, spineX + 0.28 * totalStr, comboStr * 0.55);
         spineZ = lerp(spineZ, spineZ + s * 0.11 * totalStr, comboStr * 0.5);
@@ -705,12 +706,12 @@ export class PoseSolver {
         eLx = lerp(eLx, eLx - 0.3, comboStr * 0.5); eRx = lerp(eRx, eRx - 0.3, comboStr * 0.5);
         spineX = lerp(spineX, spineX - 0.2 * totalStr, comboStr * 0.5);
       } else if (fam === 'bio' || fam === 'flatspin') {
-        if (leadIsL) {
-          sLx = lerp(sLx, 1.0, comboStr); sLz = lerp(sLz, sLz - 0.2, comboStr); eLx = lerp(eLx, 1.5, comboStr);
-          sRx = lerp(sRx, sRx - 0.3, comboStr); sRz = lerp(sRz, sRz + 0.6, comboStr); eRx = lerp(eRx, -0.1, comboStr);
-        } else {
+        if (rightReaches) {
           sRx = lerp(sRx, 1.0, comboStr); sRz = lerp(sRz, sRz - 0.2, comboStr); eRx = lerp(eRx, 1.5, comboStr);
           sLx = lerp(sLx, sLx - 0.3, comboStr); sLz = lerp(sLz, sLz + 0.6, comboStr); eLx = lerp(eLx, -0.1, comboStr);
+        } else {
+          sLx = lerp(sLx, 1.0, comboStr); sLz = lerp(sLz, sLz - 0.2, comboStr); eLx = lerp(eLx, 1.5, comboStr);
+          sRx = lerp(sRx, sRx - 0.3, comboStr); sRz = lerp(sRz, sRz + 0.6, comboStr); eRx = lerp(eRx, -0.1, comboStr);
         }
         spineY = lerp(spineY, spineY + s * 0.2 * totalStr, comboStr * 0.5);
       }
@@ -959,7 +960,7 @@ function grabPose(gt: GrabType, gb: number, time: number): GrabTargets {
       break;
     case 'safety':
       // right hand reaches down to the outside edge of the right ski
-      p.sRx = 1.4 + sway; p.sRz = -0.10; p.eRx = 2.2; p.wRx = 0.5; p.wRz = -0.2;
+      p.sRx = 1.4 + sway; p.sRz = 0.10; p.eRx = 2.2; p.wRx = 0.5; p.wRz = -0.2;
       p.sLx = -0.5 + sway2; p.sLz = 1.0; p.eLx = 0.2; p.wLx = -0.1; p.wLz = -0.1;
       p.kneeFlex = 0.98; p.spineX = 0.42 + sway;
       p.hipLX = 0.78; p.hipRX = 0.96; p.ankleLX = 0.32; p.ankleRX = 0.40; p.ankleLY = 0.04; p.ankleRY = -0.04;
