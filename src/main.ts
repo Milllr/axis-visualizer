@@ -51,11 +51,10 @@ canvas.addEventListener('pointerdown', (e) => {
   for (let i = 0; i < panels.length; i++) {
     const vp = vps[i];
     if (!vp) continue;
-    const scale = canvas.width / canvas.clientWidth;
-    const domLeft = vp.x / scale;
-    const domTop = (canvas.height - vp.y - vp.height) / scale;
-    const domW = vp.width / scale;
-    const domH = vp.height / scale;
+    const domLeft = vp.x;
+    const domTop = canvas.clientHeight - vp.y - vp.height;
+    const domW = vp.width;
+    const domH = vp.height;
     if (mx >= domLeft && mx <= domLeft + domW && my >= domTop && my <= domTop + domH) {
       panels[i].panelScene.controls.enabled = true;
       break;
@@ -144,7 +143,7 @@ function removePanel(index: number): void {
 
 function updateViewports(): void {
   resizeCanvas();
-  const vps = computeViewports(panels.length, canvas.width, canvas.height);
+  const vps = computeViewports(panels.length, canvas.clientWidth, canvas.clientHeight);
   panels.forEach((p, i) => {
     const vp = vps[i];
     if (!vp) return;
@@ -209,7 +208,8 @@ function animate(): void {
     playbackUI.timeLabel.textContent = `${(globalT * panels[0].baked.duration).toFixed(2)}s`;
   }
 
-  const vps = computeViewports(panels.length, canvas.width, canvas.height);
+  // viewports are in css pixels, three.js applies the pixel ratio itself
+  const vps = computeViewports(panels.length, canvas.clientWidth, canvas.clientHeight);
   renderPanels(renderer, panels.map((p) => p.panelScene), vps);
 }
 
