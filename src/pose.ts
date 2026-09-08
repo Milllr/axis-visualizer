@@ -672,9 +672,9 @@ export class PoseSolver {
       }
     }
 
-    // sustained off axis shape once the rotation is going
-    if (isCombo && totalStr > 0.2) {
-      const comboStr = totalStr * 0.6;
+    // sustained off axis shape once the rotation is going, released as the landing is spotted
+    if (isCombo && totalStr > 0.2 && landFade < 1) {
+      const comboStr = totalStr * 0.6 * (1 - landFade);
       const leadIsL = s > 0;
       if (fam === 'cork' || fam === 'dspin') {
         if (leadIsL) {
@@ -713,7 +713,7 @@ export class PoseSolver {
     }
     // lincoln: arms overhead like a cartwheel
     if (fam === 'lincoln' && totalStr > 0.2) {
-      const c = totalStr * 0.6;
+      const c = totalStr * 0.6 * (1 - landFade);
       sLz = lerp(sLz, 2.4, c); sRz = lerp(sRz, 2.4, c);
       sLx = lerp(sLx, 0.1, c); sRx = lerp(sRx, 0.1, c);
       eLx = lerp(eLx, 0.2, c); eRx = lerp(eRx, 0.2, c);
