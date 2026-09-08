@@ -3,7 +3,7 @@ import { createFigure, applyPose, SEG } from './figure';
 import type { Figure } from './figure';
 import { createPanelScene } from './scene';
 import type { PanelScene } from './scene';
-import { computeViewports, renderPanels } from './multiView';
+import { computeViewports, renderPanels, gridShape } from './multiView';
 import { createPanelUI, createPlaybackUI } from './ui';
 import type { PanelUI, PanelConfig } from './ui';
 import { bake, createBakedFrame } from './bake';
@@ -143,6 +143,9 @@ function removePanel(index: number): void {
 
 function updateViewports(): void {
   resizeCanvas();
+  const { cols, rows } = gridShape(panels.length);
+  panelsUiContainer.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  panelsUiContainer.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
   const vps = computeViewports(panels.length, canvas.clientWidth, canvas.clientHeight);
   panels.forEach((p, i) => {
     const vp = vps[i];

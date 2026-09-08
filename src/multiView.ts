@@ -8,17 +8,24 @@ export interface ViewportRect {
   height: number;
 }
 
-// computes viewport rectangles for N panels in a grid layout
-// fills the canvas, 1-2 columns depending on panel count
+// each panel cell has a controls column on the left, the 3d view fills the rest
+export const SIDEBAR_WIDTH = 224;
+
+export function gridShape(panelCount: number): { cols: number; rows: number } {
+  const cols = panelCount <= 1 ? 1 : 2;
+  return { cols, rows: Math.max(1, Math.ceil(panelCount / cols)) };
+}
+
+// computes viewport rectangles for N panels in a grid layout, css pixels
 export function computeViewports(
   panelCount: number,
   canvasWidth: number,
   canvasHeight: number,
+  sidebar = SIDEBAR_WIDTH,
 ): ViewportRect[] {
   if (panelCount <= 0) return [];
 
-  const cols = panelCount === 1 ? 1 : 2;
-  const rows = Math.ceil(panelCount / cols);
+  const { cols, rows } = gridShape(panelCount);
   const cellW = Math.floor(canvasWidth / cols);
   const cellH = Math.floor(canvasHeight / rows);
 
@@ -28,9 +35,9 @@ export function computeViewports(
     const row = Math.floor(i / cols);
     // webgl viewport origin is bottom-left, DOM is top-left
     rects.push({
-      x: col * cellW,
+      x: col * cellW + sidebar,
       y: canvasHeight - (row + 1) * cellH,
-      width: cellW,
+      width: Math.max(1, cellW - sidebar),
       height: cellH,
     });
   }
