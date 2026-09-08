@@ -69,9 +69,9 @@ function configToBake(config: PanelConfig) {
     inversions: config.inversions,
     spinDir: config.side,
     isSwitch: config.isSwitch,
-    model: config.model,
     mode: config.mode,
     grab: config.grab,
+    split: config.split,
   };
 }
 

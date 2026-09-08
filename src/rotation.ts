@@ -1,28 +1,37 @@
 import * as THREE from 'three';
 import type { TrickDefinition } from './tricks';
-import { rigidAxisVector, snowboxAxisVector } from './tricks';
-import { DEG, PI, TWO_PI, HALF_PI, clamp, smoothstep } from './curves';
+import { rigidAxisVector } from './tricks';
+import { DEG, PI, TWO_PI, clamp, smoothstep } from './curves';
 
-// two ways to turn a trick name into an orientation path
+// the rigid body model: angular momentum L is fixed in the world once airborne. the
+// spine precesses around L, one cone per cork (that is the dip), while the body twists
+// about its own long axis for the rest of the heading. this is the yeadon twisting
+// somersault model and it reproduces the rotational degrees shortcut google measured
+// on real corks.
 //
-// rigid: the body is a free rigid body. angular momentum L is fixed in the world once
-//   airborne. the spine precesses around L (one cone per inversion, that is the dip)
-//   while the body twists about its own long axis for the rest of the heading. this is
-//   the yeadon twisting somersault model and it reproduces the rotational degrees
-//   shortcut google measured on corks.
-//
-// snowbox: the body rotates about one fixed tilted axis for the full nominal degrees,
-//   as the game does, plus the closed form misty path from mistyPhysics.js.
-
-export type AxisModel = 'rigid' | 'snowbox';
+// a double or triple is a chain of corks. each cork is one precession plus its own
+// share of the twist, so a double cork 1080 can be a cork 7 into a cork 3 or a cork 3
+// into a cork 7. the twist rate changes between corks, which is the arm adjustment a
+// skier makes to speed up or kill the twist for the next one.
 
 export interface RotationConfig {
   trick: TrickDefinition;
   rotationDeg: number;
   inversions: number;
+  // degrees of each cork, sums to rotationDeg, optional
+  split?: number[];
   spinDir: number;
   isSwitch: boolean;
-  model: AxisModel;
+}
+
+export interface RotationSegment {
+  // nominal degrees of this cork
+  deg: number;
+  precessionRad: number;
+  twistRad: number;
+  // start and end of the segment as a fraction of the whole rotation
+  start: number;
+  end: number;
 }
 
 export interface RotationPath {
@@ -31,12 +40,13 @@ export interface RotationPath {
   orientation(F: number, u: number, target: THREE.Quaternion): THREE.Quaternion;
   // unit angular momentum in the heading frame, fixed in flight
   Lhat: THREE.Vector3;
-  // body frame direction of the spin axis at the set, for the inertia readout
+  // body frame direction of the spin axis at the set
   axisBodyAtSet: THREE.Vector3;
   // nominal total rotation in radians
   totalRad: number;
   precessionRad: number;
   twistRad: number;
+  segments: RotationSegment[];
   // tilt of L from vertical in degrees
   tiltDeg: number;
   label: string;
@@ -49,6 +59,45 @@ const _qa = new THREE.Quaternion();
 const _qb = new THREE.Quaternion();
 const _qc = new THREE.Quaternion();
 const _v = new THREE.Vector3();
+
+const MIN_CORK_DEG = 360;
+const STEP_DEG = 180;
+
+// every way to share rotationDeg across k corks in steps of 180 with at least a 360 each
+export function splitOptions(rotationDeg: number, inversions: number): number[][] {
+  const k = Math.max(1, Math.floor(inversions));
+  const total = Math.round(rotationDeg / STEP_DEG);
+  const min = MIN_CORK_DEG / STEP_DEG;
+  const out: number[][] = [];
+  if (k === 1) return [[rotationDeg]];
+  if (total < k * min) return [evenSplit(rotationDeg, k)];
+  const walk = (remaining: number, partsLeft: number, acc: number[]) => {
+    if (partsLeft === 1) {
+      if (remaining >= min) out.push([...acc, remaining * STEP_DEG]);
+      return;
+    }
+    for (let part = min; part <= remaining - min * (partsLeft - 1); part++) {
+      walk(remaining - part, partsLeft - 1, [...acc, part * STEP_DEG]);
+    }
+  };
+  walk(total, k, []);
+  return out;
+}
+
+// the default share: as even as 180 steps allow, the extra going to the first corks
+export function evenSplit(rotationDeg: number, inversions: number): number[] {
+  const k = Math.max(1, Math.floor(inversions));
+  const total = Math.round(rotationDeg / STEP_DEG);
+  const base = Math.floor(total / k);
+  let extra = total - base * k;
+  const parts: number[] = [];
+  for (let i = 0; i < k; i++) {
+    let p = base;
+    if (extra > 0) { p += 1; extra -= 1; }
+    parts.push(p * STEP_DEG);
+  }
+  return parts;
+}
 
 function leanQuat(Lhat: THREE.Vector3, leanDeg: number): THREE.Quaternion {
   const q = new THREE.Quaternion();
@@ -65,135 +114,79 @@ function applySwitch(q: THREE.Quaternion, isSwitch: boolean): THREE.Quaternion {
   return q;
 }
 
-export function buildRigidPath(cfg: RotationConfig): RotationPath {
+function buildSegments(cfg: RotationConfig): RotationSegment[] {
+  const { trick } = cfg;
+  const totalRad = cfg.rotationDeg * DEG;
+  const segs: RotationSegment[] = [];
+  if (trick.family === 'spin') {
+    segs.push({ deg: cfg.rotationDeg, precessionRad: 0, twistRad: totalRad, start: 0, end: 1 });
+    return segs;
+  }
+  if (trick.family === 'flip' || trick.family === 'lincoln') {
+    segs.push({ deg: cfg.rotationDeg, precessionRad: totalRad, twistRad: 0, start: 0, end: 1 });
+    return segs;
+  }
+  const k = clamp(Math.floor(cfg.inversions), 1, Math.max(1, Math.floor(cfg.rotationDeg / 360)));
+  let parts = cfg.split && cfg.split.length === k && cfg.split.reduce((a, b) => a + b, 0) === cfg.rotationDeg
+    ? cfg.split
+    : evenSplit(cfg.rotationDeg, k);
+  parts = parts.map((d) => Math.max(0, d));
+  let acc = 0;
+  for (const d of parts) {
+    const prec = TWO_PI;
+    const twist = Math.max(0, d - 360) * DEG;
+    segs.push({ deg: d, precessionRad: prec, twistRad: twist, start: acc / cfg.rotationDeg, end: (acc + d) / cfg.rotationDeg });
+    acc += d;
+  }
+  return segs;
+}
+
+export function buildRotationPath(cfg: RotationConfig): RotationPath {
   const { trick } = cfg;
   const s = cfg.spinDir;
   const Lhat = rigidAxisVector(trick, s);
-  const totalRev = cfg.rotationDeg / 360;
-
-  let precRev = 0;
-  let twistRev = 0;
-  if (trick.family === 'spin') {
-    precRev = 0;
-    twistRev = totalRev;
-  } else if (trick.family === 'flip' || trick.family === 'lincoln') {
-    precRev = totalRev;
-    twistRev = 0;
-  } else {
-    precRev = clamp(cfg.inversions, 1, Math.max(1, Math.floor(totalRev)));
-    twistRev = totalRev - precRev;
-  }
+  const segments = buildSegments(cfg);
+  const precRadTotal = segments.reduce((a, b) => a + b.precessionRad, 0);
+  const twistRadTotal = segments.reduce((a, b) => a + b.twistRad, 0);
 
   const Q0 = leanQuat(Lhat, trick.rigid.leanDeg);
   const identity = new THREE.Quaternion();
-  const precRad = precRev * TWO_PI;
-  const twistRad = twistRev * TWO_PI;
   const axisBodyAtSet = Lhat.clone().applyQuaternion(Q0.clone().invert());
+
+  // precession and twist angles at rotation progress F, piecewise across the corks
+  const anglesAt = (F: number): { prec: number; twist: number } => {
+    const f = clamp(F, 0, 1);
+    let prec = 0, twist = 0;
+    for (const seg of segments) {
+      if (f >= seg.end) { prec += seg.precessionRad; twist += seg.twistRad; continue; }
+      if (f <= seg.start) break;
+      const local = (f - seg.start) / Math.max(1e-9, seg.end - seg.start);
+      prec += seg.precessionRad * local;
+      twist += seg.twistRad * local;
+      break;
+    }
+    return { prec, twist };
+  };
 
   return {
     orientation(F, u, target) {
       // set lean blends in during the set, precession and twist advance with F
+      const { prec, twist } = anglesAt(F);
       _qa.copy(identity).slerp(Q0, smoothstep(u));
-      _qb.setFromAxisAngle(Lhat, precRad * F);
-      _qc.setFromAxisAngle(UP, twistRad * F * s);
+      _qb.setFromAxisAngle(Lhat, prec);
+      _qc.setFromAxisAngle(UP, twist * s);
       target.copy(_qb).multiply(_qa).multiply(_qc);
       return applySwitch(target, cfg.isSwitch);
     },
     Lhat,
     axisBodyAtSet,
     totalRad: cfg.rotationDeg * DEG,
-    precessionRad: precRad,
-    twistRad,
+    precessionRad: precRadTotal,
+    twistRad: twistRadTotal,
+    segments,
     tiltDeg: Math.acos(clamp(Math.abs(Lhat.y), 0, 1)) / DEG,
     label: 'rigid body',
   };
-}
-
-// snowbox misty constants
-const MISTY_AXIS_TILT = 32 * DEG;
-const MISTY_CARRY_SWEEP = -20 * DEG;
-const MISTY_CARRY_BLEND = 4 * DEG;
-const MISTY_MIN_TWIST_RATIO = 0.35;
-const MISTY_MAX_TWIST_RATIO = 1.5;
-
-// composeMistyOrientation from snowbox mistyPhysics.js
-function mistyOrientation(
-  totalRotation: number,
-  twistRatio: number,
-  flipDir: number,
-  spinDir: number,
-  target: THREE.Quaternion,
-): THREE.Quaternion {
-  const total = Math.max(0, totalRotation);
-  const ratio = clamp(twistRatio, MISTY_MIN_TWIST_RATIO, MISTY_MAX_TWIST_RATIO);
-  const flip = total / (1 + ratio);
-  const phase = flip / TWO_PI;
-  // repeat the backdrop each inversion so double mistys do not backdrop the other way
-  const cycle = phase - Math.floor(phase);
-  const backdropPhase = phase >= 1 && cycle < 1e-9 ? 1 : cycle;
-
-  _v.set(Math.cos(MISTY_AXIS_TILT), 0, Math.sin(MISTY_AXIS_TILT) * spinDir).normalize();
-
-  const heading = TWO_PI * ratio * phase * spinDir;
-  const backdrop = HALF_PI * Math.sin(PI * backdropPhase) * flipDir;
-  const carry = spinDir * flipDir * (
-    MISTY_CARRY_SWEEP * Math.sin(TWO_PI * backdropPhase)
-    + MISTY_CARRY_BLEND * Math.sin(2 * TWO_PI * backdropPhase)
-  );
-
-  _qa.setFromAxisAngle(UP, heading);
-  _qb.setFromAxisAngle(_v, backdrop);
-  _qc.setFromAxisAngle(UP, carry);
-  return target.copy(_qa).multiply(_qb).multiply(_qc).normalize();
-}
-
-export function buildSnowboxPath(cfg: RotationConfig): RotationPath {
-  const { trick } = cfg;
-  const s = cfg.spinDir;
-  const f = trick.flipDir === 0 ? 1 : trick.flipDir;
-  const Lhat = snowboxAxisVector(trick, s);
-  const totalRad = cfg.rotationDeg * DEG;
-  const totalRev = cfg.rotationDeg / 360;
-
-  if (trick.family === 'misty') {
-    const inv = clamp(cfg.inversions, 1, Math.max(1, Math.floor(totalRev)));
-    const ratio = clamp(totalRev / inv - 1, MISTY_MIN_TWIST_RATIO, MISTY_MAX_TWIST_RATIO);
-    // world tangent at the set is mostly the tilted flip axis plus heading
-    const tangent = new THREE.Vector3(0, ratio * s, 0)
-      .add(new THREE.Vector3(Math.cos(MISTY_AXIS_TILT), 0, Math.sin(MISTY_AXIS_TILT) * s).multiplyScalar(HALF_PI * f))
-      .normalize();
-    return {
-      orientation(F, _u, target) {
-        mistyOrientation(totalRad * F, ratio, f, s, target);
-        return applySwitch(target, cfg.isSwitch);
-      },
-      Lhat: tangent,
-      axisBodyAtSet: tangent.clone(),
-      totalRad,
-      precessionRad: inv * TWO_PI,
-      twistRad: totalRad - inv * TWO_PI,
-      tiltDeg: Math.acos(clamp(Math.abs(tangent.y), 0, 1)) / DEG,
-      label: 'snowbox misty path',
-    };
-  }
-
-  return {
-    orientation(F, _u, target) {
-      target.setFromAxisAngle(Lhat, totalRad * F);
-      return applySwitch(target, cfg.isSwitch);
-    },
-    Lhat,
-    axisBodyAtSet: Lhat.clone(),
-    totalRad,
-    precessionRad: trick.category === 'off-axis' ? totalRad : (trick.family === 'spin' ? 0 : totalRad),
-    twistRad: trick.family === 'spin' ? totalRad : 0,
-    tiltDeg: Math.acos(clamp(Math.abs(Lhat.y), 0, 1)) / DEG,
-    label: 'snowbox fixed axis',
-  };
-}
-
-export function buildRotationPath(cfg: RotationConfig): RotationPath {
-  return cfg.model === 'rigid' ? buildRigidPath(cfg) : buildSnowboxPath(cfg);
 }
 
 // angular velocity between two orientations, world frame, radians per unit time

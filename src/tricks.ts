@@ -33,14 +33,7 @@ export interface TrickDefinition {
   // how deep the body folds in the air, 1 is a full somersault tuck, corks stay laid out
   tuckDepth: number;
   rigid: RigidAxisParams;
-  // fixed axis unit weights (pitch, yaw, roll) used by the snowbox model
-  snowboxAxis: { pitch: number; yaw: number; roll: number };
   color: number;
-}
-
-function unit(pitch: number, yaw: number, roll: number) {
-  const n = Math.hypot(pitch, yaw, roll) || 1;
-  return { pitch: pitch / n, yaw: yaw / n, roll: roll / n };
 }
 
 export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
@@ -56,7 +49,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Pure horizontal rotation around the vertical axis',
     tuckDepth: 0.5,
     rigid: { tiltDeg: 0, rollShare: 0, leanDeg: 0 },
-    snowboxAxis: unit(0, 1, 0),
     color: 0x00ff88,
   },
   frontflip: {
@@ -71,7 +63,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Forward somersault around the lateral axis',
     tuckDepth: 1.0,
     rigid: { tiltDeg: 90, rollShare: 0, leanDeg: 0 },
-    snowboxAxis: unit(1, 0, 0),
     color: 0xff6644,
   },
   backflip: {
@@ -86,7 +77,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Backward somersault around the lateral axis',
     tuckDepth: 1.0,
     rigid: { tiltDeg: 90, rollShare: 0, leanDeg: 0 },
-    snowboxAxis: unit(1, 0, 0),
     color: 0xff6644,
   },
   lincolnLoop: {
@@ -101,7 +91,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Sideways cartwheel around the direction of travel',
     tuckDepth: 0.5,
     rigid: { tiltDeg: 90, rollShare: 1, leanDeg: 0 },
-    snowboxAxis: unit(0, 0, 1),
     color: 0xffaa00,
   },
 
@@ -118,7 +107,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Off axis spin leaning back over the tails, never fully inverted',
     tuckDepth: 0.4,
     rigid: { tiltDeg: 36, rollShare: 0.4, leanDeg: 8 },
-    snowboxAxis: unit(0.568, 0.669, 0.479),
     color: 0x44aaff,
   },
   rodeo: {
@@ -133,7 +121,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Backflip thrown over one shoulder with spin, inverted',
     tuckDepth: 0.85,
     rigid: { tiltDeg: 58, rollShare: 0.3, leanDeg: 18 },
-    snowboxAxis: unit(0.747, 0.472, 0.468),
     color: 0xff44aa,
   },
   dSpin: {
@@ -148,7 +135,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Inverted cork thrown back and sideways, head well below the feet',
     tuckDepth: 0.6,
     rigid: { tiltDeg: 72, rollShare: 0.25, leanDeg: 20 },
-    snowboxAxis: unit(0.90, 0.26, 0.35),
     color: 0xaa44ff,
   },
 
@@ -165,7 +151,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Forward cork, the lead shoulder dips toward the landing',
     tuckDepth: 0.4,
     rigid: { tiltDeg: 36, rollShare: 0.4, leanDeg: 8 },
-    snowboxAxis: unit(0.808, 0.491, 0.326),
     color: 0x44ffaa,
   },
   misty: {
@@ -180,7 +165,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Frontflip thrown over a dropped shoulder with spin, lands switch at 540',
     tuckDepth: 0.8,
     rigid: { tiltDeg: 55, rollShare: 0.35, leanDeg: 15 },
-    snowboxAxis: unit(0.759, 0.447, 0.473),
     color: 0xff8844,
   },
   flatspin: {
@@ -195,7 +179,6 @@ export const TRICK_DEFINITIONS: Record<string, TrickDefinition> = {
     description: 'Laid out spin on a nearly horizontal axis, chest to the sky at the apex',
     tuckDepth: 0.35,
     rigid: { tiltDeg: 75, rollShare: 0.6, leanDeg: 15 },
-    snowboxAxis: unit(0.80, 0.26, 0.54),
     color: 0xffff44,
   },
 };
@@ -204,18 +187,6 @@ export const TRICK_KEYS = Object.keys(TRICK_DEFINITIONS);
 
 export function isOffAxis(trick: TrickDefinition): boolean {
   return trick.category === 'off-axis';
-}
-
-// unit angular momentum direction in the heading frame for the snowbox fixed axis model
-// signs follow snowbox distributeMomentum: x = pitch * flip, y = yaw * spin, z = roll * spin * flip
-export function snowboxAxisVector(trick: TrickDefinition, spinDir: number): THREE.Vector3 {
-  const f = trick.flipDir === 0 ? 1 : trick.flipDir;
-  const s = spinDir;
-  const a = trick.snowboxAxis;
-  const v = new THREE.Vector3(a.pitch * f, a.yaw * s, a.roll * s * f);
-  if (trick.family === 'lincoln') v.set(0, 0, s);
-  if (trick.family === 'flip') v.set(f, 0, 0);
-  return v.normalize();
 }
 
 // unit angular momentum direction for the rigid body model, tilt split into pitch and roll parts

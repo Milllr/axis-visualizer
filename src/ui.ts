@@ -2,7 +2,7 @@ import { TRICK_DEFINITIONS, TRICK_KEYS } from './tricks';
 import type { TrickDefinition } from './tricks';
 import { GRAB_TYPES, GRAB_NAMES } from './pose';
 import type { GrabType } from './pose';
-import type { AxisModel } from './rotation';
+import { splitOptions, evenSplit } from './rotation';
 import type { SceneMode } from './timeline';
 import type { BakedFrame, BakeSummary } from './bake';
 import type { OverlayFlags } from './overlays';
@@ -14,8 +14,9 @@ export interface PanelConfig {
   isSwitch: boolean;
   side: number; // 1 = left, -1 = right
   grab: GrabType;
-  model: AxisModel;
   mode: SceneMode;
+  // degrees of each cork in a double or triple, sums to rotationDeg
+  split: number[];
 }
 
 export interface PanelUI {
@@ -70,6 +71,28 @@ function fmt(v: number, digits = 0): string {
   return v.toFixed(digits);
 }
 
+// skier shorthand for degrees: 360 is a 3, 720 a 7, 1080 a 10
+function shortDeg(deg: number): string {
+  return String(Math.floor(deg / 100));
+}
+
+function splitKey(parts: number[]): string {
+  return parts.join('+');
+}
+
+function populateSplit(select: HTMLSelectElement, trick: TrickDefinition, rotationDeg: number, inversions: number): void {
+  const prev = select.value;
+  select.innerHTML = '';
+  const options = splitOptions(rotationDeg, inversions);
+  for (const parts of options) {
+    const label = parts.map((d) => `${trick.name} ${shortDeg(d)}`).join(' + ');
+    select.appendChild(el('option', { value: splitKey(parts) }, label));
+  }
+  const keys = options.map(splitKey);
+  if (keys.includes(prev)) select.value = prev;
+  else select.value = splitKey(evenSplit(rotationDeg, inversions));
+}
+
 export function createPanelUI(
   panelIndex: number,
   onChange: (config: PanelConfig) => void,
@@ -118,10 +141,9 @@ export function createPanelUI(
   for (const g of GRAB_TYPES) grabSelect.appendChild(el('option', { value: g }, GRAB_NAMES[g]));
   container.appendChild(row('grab', grabSelect));
 
-  const modelSelect = el('select', { class: 'model-select' });
-  modelSelect.appendChild(el('option', { value: 'rigid' }, 'rigid body'));
-  modelSelect.appendChild(el('option', { value: 'snowbox' }, 'snowbox'));
-  container.appendChild(row('axis', modelSelect));
+  const splitSelect = el('select', { class: 'split-select' });
+  const splitRow = row('split', splitSelect);
+  container.appendChild(splitRow);
 
   const modeSelect = el('select', { class: 'mode-select' });
   modeSelect.appendChild(el('option', { value: 'skis' }, 'skis'));
@@ -144,14 +166,15 @@ export function createPanelUI(
     isSwitch: false,
     side: 1,
     grab: 'none',
-    model: 'rigid',
     mode: 'skis',
+    split: [TRICK_DEFINITIONS[TRICK_KEYS[0]].rotations[0]],
   };
 
   const refreshVisibility = () => {
     const trick = TRICK_DEFINITIONS[trickSelect.value];
     sideRow.style.display = trick.hasSide ? 'flex' : 'none';
     inversionRow.style.display = trick.hasInversions ? 'flex' : 'none';
+    splitRow.style.display = trick.hasInversions && (Number(inversionSelect.value) || 1) >= 2 ? 'flex' : 'none';
     descEl.textContent = trick.description;
   };
 
@@ -162,31 +185,40 @@ export function createPanelUI(
     config.isSwitch = switchCheckbox.checked;
     config.side = sideLeftRadio.checked ? 1 : -1;
     config.grab = grabSelect.value as GrabType;
-    config.model = modelSelect.value as AxisModel;
     config.mode = modeSelect.value as SceneMode;
+    config.split = splitSelect.value.split('+').map(Number).filter((n) => n > 0);
     refreshVisibility();
     onChange(config);
   };
 
+  const refreshSplit = () => {
+    populateSplit(splitSelect, TRICK_DEFINITIONS[trickSelect.value], Number(rotationSelect.value), Number(inversionSelect.value) || 1);
+  };
   trickSelect.addEventListener('change', () => {
     const trick = TRICK_DEFINITIONS[trickSelect.value];
     populateRotation(rotationSelect, trick);
     populateInversions(inversionSelect, trick, Number(rotationSelect.value));
+    refreshSplit();
     fireChange();
   });
   rotationSelect.addEventListener('change', () => {
     populateInversions(inversionSelect, TRICK_DEFINITIONS[trickSelect.value], Number(rotationSelect.value));
+    refreshSplit();
     fireChange();
   });
-  inversionSelect.addEventListener('change', fireChange);
+  inversionSelect.addEventListener('change', () => {
+    refreshSplit();
+    fireChange();
+  });
   switchCheckbox.addEventListener('change', fireChange);
   sideLeftRadio.addEventListener('change', fireChange);
   sideRightRadio.addEventListener('change', fireChange);
   grabSelect.addEventListener('change', fireChange);
-  modelSelect.addEventListener('change', fireChange);
+  splitSelect.addEventListener('change', fireChange);
   modeSelect.addEventListener('change', fireChange);
 
   populateInversions(inversionSelect, TRICK_DEFINITIONS[TRICK_KEYS[0]], config.rotationDeg);
+  refreshSplit();
   refreshVisibility();
 
   let lastPhase = '';
@@ -199,7 +231,7 @@ export function createPanelUI(
         : s.precessionDeg > 0 ? `${fmt(s.precessionDeg)}° precession` : `${fmt(s.twistDeg)}° twist`;
       summaryEl.innerHTML = '';
       const lines = [
-        `${s.modelLabel}, L tilt ${fmt(s.axisTiltDeg)}°`,
+        `L tilt ${fmt(s.axisTiltDeg)}°`,
         `rotational degrees ${fmt(s.rotationalDeg)} vs ${fmt(s.nominalDeg)} nominal (${s.shortcutDeg >= 0 ? 'shortcut' : 'detour'} ${fmt(Math.abs(s.shortcutDeg))}°)`,
         split,
         `speed weighted tilt ${fmt(s.weightedTiltDeg)}°, peak ${fmt(s.peakOmegaDeg)}°/s, touchdown ${fmt(s.touchdownOmegaDeg)}°/s`,

@@ -4,7 +4,7 @@ import type { TrickDefinition } from './tricks';
 import { PROFILES, sampleChannels, effectiveTuck, ZERO_CHANNELS } from './profiles';
 import type { PoseChannels } from './profiles';
 import { buildRotationPath, angularVelocityBetween, relativeAngle } from './rotation';
-import type { AxisModel, RotationPath } from './rotation';
+import type { RotationPath } from './rotation';
 import { Timeline, createTimelineSample, GRAVITY } from './timeline';
 import type { SceneMode, SegmentName, TimelineSample } from './timeline';
 import { PoseSolver, poseToJoints, createJointAngles } from './pose';
@@ -29,9 +29,9 @@ export interface BakeConfig {
   inversions: number;
   spinDir: number;
   isSwitch: boolean;
-  model: AxisModel;
   mode: SceneMode;
   grab: GrabType;
+  split?: number[];
 }
 
 export interface BakedFrame {
@@ -160,9 +160,9 @@ export function bake(config: BakeConfig): Baked {
     trick,
     rotationDeg: config.rotationDeg,
     inversions: config.inversions,
+    split: config.split,
     spinDir,
     isSwitch: config.isSwitch,
-    model: config.model,
   });
 
   const figure = getScratchFigure();
