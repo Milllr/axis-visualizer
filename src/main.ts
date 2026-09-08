@@ -217,3 +217,6 @@ window.addEventListener('resize', updateViewports);
 
 addPanel();
 animate();
+
+// debug handle for the console
+(window as unknown as { axisviz: unknown }).axisviz = { panels, flags };

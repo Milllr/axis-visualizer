@@ -48,7 +48,7 @@ export interface Overlays {
 }
 
 const GHOST_COUNT = 8;
-const GHOST_OPACITY = 0.10;
+const GHOST_OPACITY = 0.05;
 const RIBBON_HALF = 0.6;
 
 function axisColor(tilt01: number, target: THREE.Color): THREE.Color {
@@ -124,7 +124,7 @@ export function createOverlays(): Overlays {
   pathLine.frustumCulled = false;
   group.add(pathLine);
 
-  const ribbonMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.30, side: THREE.DoubleSide, depthWrite: false });
+  const ribbonMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
   const ribbon = new THREE.Mesh(new THREE.BufferGeometry(), ribbonMat);
   ribbon.frustumCulled = false;
   group.add(ribbon);
@@ -292,7 +292,7 @@ export function createOverlays(): Overlays {
       poseGhost(g, scratch);
       const fade = (i + 1) / (ghosts.length + 1);
       g.group.traverse((child) => {
-        if (child instanceof THREE.Mesh) (child.material as THREE.MeshPhongMaterial).opacity = GHOST_OPACITY + fade * 0.08;
+        if (child instanceof THREE.Mesh) (child.material as THREE.MeshPhongMaterial).opacity = GHOST_OPACITY + fade * 0.07;
       });
     }
   }
