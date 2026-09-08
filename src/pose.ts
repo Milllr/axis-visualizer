@@ -149,7 +149,7 @@ export function createJointAngles(): JointAngles {
 // snowbox BODY_CFG, the parts that matter in the air
 const CFG = {
   throwDuration: 0.50,
-  throwArmSweep: 2.8,
+  throwArmSweep: 2.2,
   throwSpineCoil: 0.70,
   throwKneeCompress: -1.3,
   throwHipCoil: 0.55,
@@ -578,9 +578,10 @@ export class PoseSolver {
     }
 
     if (landFade > 0) {
-      sLx = lerp(sLx, -0.12, landFade * 0.5); sLz = lerp(sLz, 0.35, landFade * 0.5);
-      sRx = lerp(sRx, -0.12, landFade * 0.5); sRz = lerp(sRz, 0.35, landFade * 0.5);
-      eLx = lerp(eLx, 0.3, landFade * 0.4); eRx = lerp(eRx, 0.3, landFade * 0.4);
+      // arms come wide as the landing is spotted, which is what slows the spin
+      sLx = lerp(sLx, 0.25, landFade * 0.7); sLz = lerp(sLz, 1.15, landFade * 0.7);
+      sRx = lerp(sRx, 0.25, landFade * 0.7); sRz = lerp(sRz, 1.15, landFade * 0.7);
+      eLx = lerp(eLx, 0.2, landFade * 0.6); eRx = lerp(eRx, 0.2, landFade * 0.6);
     }
 
     // throw arm sweeps, family specific
