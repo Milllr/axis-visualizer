@@ -209,6 +209,8 @@ export interface PoseInput {
   throwDuration: number;
   // 0 to 1 wind up during the approach
   windup: number;
+  // 0 until the pop at the end of the lip, 1 when the skis leave
+  popBlend: number;
   // seconds since touchdown, negative while airborne
   landTime: number;
   landingImpact: number;
@@ -276,7 +278,7 @@ export class PoseSolver {
   solve(inp: PoseInput): SemanticPose {
     const dt = Math.min(Math.max(inp.dt, 0), 1 / 30);
     const airborne = inp.segment === 'flight';
-    const tricking = inp.segment === 'set' || inp.segment === 'flight';
+    const tricking = airborne || inp.popBlend > 0;
 
     // trick pose blend rises fast from the start of the set and decays after landing
     const tgt = tricking ? 1 : 0;

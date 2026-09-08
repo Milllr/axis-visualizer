@@ -5,8 +5,8 @@ import { PROFILES, sampleChannels, effectiveTuck, ZERO_CHANNELS } from './profil
 import type { PoseChannels } from './profiles';
 import { buildRotationPath, angularVelocityBetween, relativeAngle } from './rotation';
 import type { RotationPath } from './rotation';
-import { Timeline, createTimelineSample, GRAVITY } from './timeline';
-import type { SceneMode, SegmentName, TimelineSample } from './timeline';
+import { Timeline, createTimelineSample, GRAVITY, kickerFor } from './timeline';
+import type { SceneMode, SegmentName, TimelineSample, KickerParams } from './timeline';
 import { PoseSolver, poseToJoints, createJointAngles } from './pose';
 import type { GrabType, JointAngles, PoseInput } from './pose';
 import { createFigure, applyPose, SEG } from './figure';
@@ -86,6 +86,7 @@ export interface Baked {
   duration: number;
   summary: BakeSummary;
   Lhat: THREE.Vector3;
+  kicker: KickerParams;
   sampleAt(time: number, out: BakedFrame): BakedFrame;
 }
 
@@ -115,6 +116,10 @@ export function createBakedFrame(): BakedFrame {
 }
 
 const BAKE_DT = 1 / 120;
+// the pop: the last moments on the lip where the legs extend, the throw releases and the
+// momentum is created. fixed length whatever the trick, a bigger trick winds up longer
+const POP_DURATION = 0.14;
+const THROW_LEAD = 0.10;
 const UP = new THREE.Vector3(0, 1, 0);
 const ZAXIS = new THREE.Vector3(0, 0, 1);
 
@@ -176,17 +181,19 @@ export function bake(config: BakeConfig): Baked {
   const throwIntensity = clamp(0.55 + 0.5 * bigness, 0.75, 1.6);
   const windupPeak = clamp(0.55 + 0.45 * bigness, 0.7, 1.4);
   const windupRamp = 0.3 + 0.2 * bigness;
-  const setup: SetupParams = { setDuration, throwIntensity, windupPeak, windupRamp, throwDuration: Math.max(0.5, setDuration + 0.25) };
+  const setup: SetupParams = { setDuration, throwIntensity, windupPeak, windupRamp, throwDuration: 0.5 };
+  const kicker = kickerFor(config.rotationDeg);
 
   // ── pass 0: pose through the approach and set to find the com over the feet ──
-  let timeline = new Timeline({ mode: config.mode, takeoffComUp: 0.92, takeoffComAlong: 0.05, landingComHeight: 0.88, setDuration });
+  let timeline = new Timeline({ mode: config.mode, takeoffComUp: 0.92, takeoffComAlong: 0.05, landingComHeight: 0.88, setDuration, kicker });
   const measureOffsets = (tl: Timeline) => {
     solver.reset();
     const input = makeInput(config.mode, trick, spinDir, flipDir, offAxis);
     let comLocal = new THREE.Vector3(), feetLocal = new THREE.Vector3();
-    for (let t = 0; t <= tl.setStart + 0.25 + 1e-6; t += BAKE_DT) {
+    for (let t = 0; t <= tl.flightStart + 1e-6; t += BAKE_DT) {
       tl.sample(t, tsample);
       fillGroundInput(input, t, BAKE_DT, tsample, tl, config, setup);
+      input.popBlend = clamp01((t - (tl.flightStart - POP_DURATION)) / POP_DURATION);
       const pose = solver.solve(input);
       poseToJoints(pose, joints);
       applyPose(figure, joints);
@@ -200,7 +207,7 @@ export function bake(config: BakeConfig): Baked {
     return { up: d.y, along: d.z };
   };
   const off = measureOffsets(timeline);
-  timeline = new Timeline({ mode: config.mode, takeoffComUp: off.up, takeoffComAlong: off.along, landingComHeight: 0.88, setDuration });
+  timeline = new Timeline({ mode: config.mode, takeoffComUp: off.up, takeoffComAlong: off.along, landingComHeight: 0.88, setDuration, kicker });
 
   const duration = timeline.duration;
   const n = Math.ceil(duration / BAKE_DT) + 1;
@@ -209,14 +216,14 @@ export function bake(config: BakeConfig): Baked {
 
   const flightStart = timeline.flightStart;
   const flightEnd = timeline.flightEnd;
-  const setStart = timeline.setStart;
-  const rotStart = setStart;
+  const popStart = flightStart - POP_DURATION;
   const rotEnd = flightEnd;
+  const popBlendAt = (t: number): number => clamp01((t - popStart) / POP_DURATION);
 
-  // rate profile: L ramps up through the set and is constant in the air
+  // rate profile: L is created in the pop at the end of the lip and is constant in the air
   const momentumShape = (t: number): number => {
-    if (t < rotStart) return 0;
-    if (t < flightStart) return smoothstep((t - rotStart) / Math.max(1e-6, flightStart - rotStart));
+    if (t < popStart) return 0;
+    if (t < flightStart) return smoothstep(popBlendAt(t));
     if (t <= rotEnd) return 1;
     return 0;
   };
@@ -264,7 +271,7 @@ export function bake(config: BakeConfig): Baked {
     const t = times[i];
     timeline.sample(t, tsample);
     const seg = tsample.segment;
-    const u = tsample.setBlend;
+    const u = popBlendAt(t);
     path.orientation(F[i], u, out);
     // pull the cork out while spotting and opening up
     const airT = tsample.airT;
@@ -364,6 +371,7 @@ export function bake(config: BakeConfig): Baked {
       const tuck = inAir ? effectiveTuck(ch.tuck, airT, offAxis) : 0;
 
       fillGroundInput(input, t, dt, tsample, timeline, config, setup);
+      input.popBlend = popBlendAt(t);
       input.channels = ch;
       input.tuck = tuck;
       input.omegaX = omegaBody.x; input.omegaY = omegaBody.y; input.omegaZ = omegaBody.z;
@@ -480,6 +488,7 @@ export function bake(config: BakeConfig): Baked {
     duration,
     summary,
     Lhat: path.Lhat.clone(),
+    kicker,
     sampleAt(time: number, out: BakedFrame): BakedFrame {
       const tt = clamp(time, 0, duration);
       const fi = tt / BAKE_DT;
@@ -547,6 +556,7 @@ function makeInput(
     throwIntensity: 1,
     throwDuration: 0.5,
     windup: 0,
+    popBlend: 0,
     landTime: -1,
     landingImpact: 0,
     groundPitch: 0,
@@ -576,9 +586,11 @@ function fillGroundInput(
   input.segProgress = ts.segProgress;
   input.airT = ts.airT;
   input.grab = config.grab;
-  input.throwTime = t - tl.setStart;
+  // the throw releases just before the skis leave the lip
+  input.throwTime = t - (tl.flightStart - THROW_LEAD);
   input.throwIntensity = setup.throwIntensity;
   input.throwDuration = setup.throwDuration;
+  // wind up builds through the approach and holds coiled through the set until the pop
   input.windup = setup.windupPeak * clamp01((t - (tl.setStart - setup.windupRamp)) / setup.windupRamp);
   if (t >= tl.setStart) input.windup = setup.windupPeak;
   input.landTime = t - tl.flightEnd;
